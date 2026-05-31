@@ -868,3 +868,24 @@ export type Database = {
     };
   };
 };
+
+// Recommendation types (Slope One + ACO)
+export interface RecommendedLocation {
+  id: string;
+  lat: number;
+  lng: number;
+  predicted_rating: number;
+  score: number;
+  rank: number;
+  distance_km: number;
+  name?: string;
+  type?: string | null;
+  city_name?: string | null;
+}
+
+export interface RecommendationMeta {
+  total: number;
+  algorithm: string;
+  lat: number;
+  lng: number;
+}

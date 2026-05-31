@@ -20,6 +20,7 @@ const Header = () => {
   const navigation = [
     { name: 'Beranda', href: '/', isRoute: true },
     { name: 'Terapis', href: '/terapis', isRoute: true },
+    { name: 'Rekomendasi', href: '/rekomendasi', isRoute: true },
     { name: 'Pelatihan', href: '/pelatihan', isRoute: true },
     { name: 'Cari Kerja', href: '/cari-kerja', isRoute: true },
     { name: 'Komunitas', href: '/komunitas', isRoute: true },

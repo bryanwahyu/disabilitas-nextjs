@@ -62,7 +62,8 @@ import type {
   ScheduleDetail,
   AvailableSlot,
   TherapyProvider,
-  LocationTherapistAffiliation
+  LocationTherapistAffiliation,
+  RecommendedLocation,
 } from './types';
 
 /** Shape returned by the /me endpoint (PascalCase or snake_case from Go backend) */
@@ -580,6 +581,16 @@ class ApiClient {
       },
       get: async (id: string) => {
         return await this.makeRequest<TrainingDetail>(`/public/trainings/${id}`);
+      }
+    },
+    recommendations: {
+      locations: async (params: { lat?: number; lng?: number; limit?: number } = {}) => {
+        const qs = new URLSearchParams();
+        if (params.lat != null) qs.set('lat', String(params.lat));
+        if (params.lng != null) qs.set('lng', String(params.lng));
+        if (params.limit) qs.set('limit', String(params.limit));
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        return await this.makeRequest<RecommendedLocation[]>(`/public/recommendations/locations${suffix}`);
       }
     }
   };
