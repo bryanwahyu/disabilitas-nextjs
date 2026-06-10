@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -15,6 +17,7 @@ export default function ForumPage() {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [asAnonymous, setAsAnonymous] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -38,13 +41,14 @@ export default function ForumPage() {
       toast({ title: 'Lengkapi form', description: 'Judul dan isi wajib diisi', variant: 'destructive' });
       return;
     }
-    const res = await apiClient.forum.createThread({ user_id: user.id, title, body });
+    const res = await apiClient.forum.createThread({ user_id: user.id, title, body, is_anonymous: asAnonymous });
     if (res.error) {
       toast({ title: 'Gagal', description: res.error, variant: 'destructive' });
       return;
     }
     setTitle('');
     setBody('');
+    setAsAnonymous(false);
     await load();
     toast({ title: 'Berhasil', description: 'Diskusi dibuat' });
   };
@@ -63,6 +67,18 @@ export default function ForumPage() {
             <CardContent className="space-y-3">
               <Input placeholder="Judul diskusi" value={title} onChange={e => setTitle(e.target.value)} />
               <Textarea placeholder="Tulis isi diskusi" value={body} onChange={e => setBody(e.target.value)} />
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="thread_anonymous"
+                  checked={asAnonymous}
+                  onCheckedChange={(v) => setAsAnonymous(v === true)}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="thread_anonymous" className="font-normal text-xs text-gray-600 leading-snug">
+                  Kirim sebagai anonim — nama Anda tidak ditampilkan. Tidak semua hal mudah
+                  diceritakan dengan nama terbuka, dan itu tidak apa-apa.
+                </Label>
+              </div>
               <div className="text-right">
                 <Button onClick={createThread} className="bg-primary hover:bg-primary/90">Kirim</Button>
               </div>

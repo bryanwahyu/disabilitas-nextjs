@@ -42,6 +42,7 @@ import type {
   Community,
   CommunityCreate,
   CommunityListParams,
+  CommunityWithStats,
   PasswordResetRequest,
   PasswordResetValidate,
   PasswordReset,
@@ -71,6 +72,8 @@ import type {
   ChildMilestone,
   ChildMilestoneInput,
   ProgressMonthlySummary,
+  ContentReport,
+  ContentReportWithContext,
 } from './types';
 
 /** Shape returned by the /me endpoint (PascalCase or snake_case from Go backend) */
@@ -1155,19 +1158,25 @@ class ApiClient {
 
   // Forum methods
   forum = {
-    listThreads: async () => {
-      return await this.makeRequest<ForumThread[]>(`/public/forum/threads`);
+    listThreads: async (params: { community_id?: string; q?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.community_id) qs.set('community_id', params.community_id);
+      if (params.q) qs.set('q', params.q);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<ForumThread[]>(`/public/forum/threads${suffix}`);
     },
     getThread: async (id: string) => {
       return await this.makeRequest<ForumThread & { comments: ForumComment[] }>(`/public/forum/threads/${id}`);
     },
-    createThread: async (data: { user_id: string; title: string; body: string }) => {
+    createThread: async (data: { user_id: string; title: string; body: string; is_anonymous?: boolean }) => {
       return await this.makeRequest<ForumThread>(`/forum/threads`, {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
-    addComment: async (threadId: string, data: { user_id: string; body: string }) => {
+    addComment: async (threadId: string, data: { user_id: string; body: string; is_anonymous?: boolean }) => {
       return await this.makeRequest<ForumComment>(`/forum/threads/${threadId}/comments`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -1212,6 +1221,16 @@ class ApiClient {
       is_private: c.IsPrivate || c.is_private || false,
       created_by: c.CreatedBy || c.created_by,
       created_at: c.CreatedAt || c.created_at || '',
+    };
+  }
+
+  // Community with stats: embedded community is PascalCase, stat fields are snake_case
+  private transformCommunityStats(c: RawCommunity & Partial<CommunityWithStats>): CommunityWithStats {
+    return {
+      ...this.transformCommunity(c),
+      member_count: c.member_count ?? 0,
+      thread_count: c.thread_count ?? 0,
+      last_activity_at: c.last_activity_at,
     };
   }
 
@@ -1493,7 +1512,88 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(data),
       });
-    }
+    },
+
+    // Public discovery (tanpa login) — termasuk member_count/thread_count/last_activity_at
+    publicList: async (params: CommunityListParams = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.page) qs.set('page', String(params.page));
+      if (params.per_page) qs.set('per_page', String(params.per_page));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      const response = await this.makeRequest<(RawCommunity & Partial<CommunityWithStats>)[]>(`/public/communities${suffix}`);
+      if (response.data && Array.isArray(response.data)) {
+        return { ...response, data: response.data.map(c => this.transformCommunityStats(c)) };
+      }
+      return response as ApiResponse<CommunityWithStats[]>;
+    },
+
+    publicGet: async (id: string) => {
+      const response = await this.makeRequest<RawCommunity & Partial<CommunityWithStats>>(`/public/communities/${id}`);
+      if (response.data) {
+        return { ...response, data: this.transformCommunityStats(response.data) };
+      }
+      return response as ApiResponse<CommunityWithStats>;
+    },
+
+    join: async (id: string) => {
+      return await this.makeRequest<void>(`/communities/${id}/join`, { method: 'POST' });
+    },
+
+    leave: async (id: string) => {
+      return await this.makeRequest<void>(`/communities/${id}/leave`, { method: 'POST' });
+    },
+
+    mine: async () => {
+      const response = await this.makeRequest<RawCommunity[]>('/me/communities');
+      if (response.data && Array.isArray(response.data)) {
+        return { ...response, data: response.data.map(c => this.transformCommunity(c)) };
+      }
+      return response as ApiResponse<Community[]>;
+    },
+
+    createThread: async (communityId: string, data: { title: string; body: string; is_anonymous?: boolean }) => {
+      return await this.makeRequest<ForumThread>(`/communities/${communityId}/threads`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+  };
+
+  // Lapor konten + antrian moderasi (Fase 2 fokus komunitas)
+  reports = {
+    reportThread: async (threadId: string, data: { reason: string; details?: string }) => {
+      return await this.makeRequest<ContentReport>(`/forum/threads/${threadId}/report`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    reportReply: async (replyId: string, data: { reason: string; details?: string }) => {
+      return await this.makeRequest<ContentReport>(`/forum/replies/${replyId}/report`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+  };
+
+  adminReports = {
+    list: async (params: { status?: string; page?: number; per_page?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set('status', params.status);
+      if (params.page) qs.set('page', String(params.page));
+      if (params.per_page) qs.set('per_page', String(params.per_page));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<ContentReportWithContext[]>(`/admin/reports${suffix}`);
+    },
+    openCount: async () => {
+      return await this.makeRequest<{ open_count: number }>('/admin/reports/open-count');
+    },
+    resolve: async (id: string, data: { status: 'resolved' | 'dismissed'; note?: string }) => {
+      return await this.makeRequest<ContentReport>(`/admin/reports/${id}/resolve`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
   };
 
   // Shortcuts for backward compatibility

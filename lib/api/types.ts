@@ -958,3 +958,34 @@ export interface ProgressMonthlySummary {
   avg_rating: number;
   milestone_count: number;
 }
+
+// Komunitas dengan statistik aktivitas (endpoint publik, Fase 1 fokus komunitas)
+export interface CommunityWithStats extends Community {
+  member_count: number;
+  thread_count: number;
+  last_activity_at?: string;
+}
+
+// Laporan konten (Fase 2 fokus komunitas)
+export type ReportReason = 'stigma' | 'kasar' | 'spam' | 'lainnya';
+
+export interface ContentReport {
+  id: string;
+  target_type: 'thread' | 'reply';
+  target_id: string;
+  reason: string;
+  details?: string;
+  reporter_id: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  resolved_by?: string;
+  resolution_note?: string;
+  resolved_at?: string;
+  created_at: string;
+}
+
+export interface ContentReportWithContext extends ContentReport {
+  content_snippet: string;
+  content_author: string;
+  reporter_email: string;
+  community_id?: string;
+}

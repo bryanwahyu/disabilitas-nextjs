@@ -19,6 +19,7 @@ import ArticleManager from '@/components/admin/ArticleManager';
 import NotificationManager from '@/components/admin/NotificationManager';
 import EventManager from '@/components/admin/EventManager';
 import ForumManager from '@/components/admin/ForumManager';
+import ReportManager from '@/components/admin/ReportManager';
 import JobManager from '@/components/admin/JobManager';
 import KemitraanManager from '@/components/admin/KemitraanManager';
 import MasterLokasiManager from '@/components/admin/MasterLokasiManager';
@@ -347,11 +348,16 @@ export default function AdminPage() {
             <TabsTrigger value="kemitraan">Kemitraan</TabsTrigger>
             <TabsTrigger value="articles">Artikel</TabsTrigger>
             <TabsTrigger value="forum">Forum</TabsTrigger>
+            <TabsTrigger value="reports">Laporan</TabsTrigger>
             <TabsTrigger value="master-lokasi">Master Lokasi</TabsTrigger>
           </TabsList>
 
           <TabsContent value="contacts">
             <ContactManager />
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <ReportManager />
           </TabsContent>
 
           <TabsContent value="notifications">

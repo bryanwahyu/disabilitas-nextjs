@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
-import type { Community, CommunityCreate } from '@/lib/api/types';
+import type { Community, CommunityCreate, CommunityWithStats } from '@/lib/api/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -20,10 +20,29 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Users, Plus, Search, Lock, Globe, MessageSquare } from 'lucide-react';
+import { Users, Plus, Search, MessageSquare, Clock } from 'lucide-react';
+
+function parseTags(tagsString?: string): string[] {
+  if (!tagsString) return [];
+  const cleaned = tagsString.replace(/^\{|\}$/g, '');
+  return cleaned ? cleaned.split(',').map((t) => t.trim()).filter(Boolean) : [];
+}
+
+function lastActivityLabel(iso?: string): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return null;
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 60) return 'aktif baru saja';
+  if (mins < 60 * 24) return `aktif ${Math.floor(mins / 60)} jam lalu`;
+  const days = Math.floor(mins / (60 * 24));
+  if (days < 30) return `aktif ${days} hari lalu`;
+  return `aktif ${new Date(iso).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}`;
+}
 
 export default function CommunitiesPage() {
-  const [communities, setCommunities] = useState<Community[]>([]);
+  const [communities, setCommunities] = useState<CommunityWithStats[]>([]);
+  const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -40,33 +59,31 @@ export default function CommunitiesPage() {
     fetchCommunities();
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!user) {
+      setMyCommunities([]);
+      return;
+    }
+    apiClient.communities.mine().then((res) => {
+      if (res.data) setMyCommunities(res.data);
+    });
+  }, [user]);
+
   const fetchCommunities = async () => {
     try {
-      const response = await apiClient.communities.list({
+      const response = await apiClient.communities.publicList({
         q: searchQuery || undefined,
         per_page: 50,
       });
-      if (response.error) {
-        // If unauthorized, show login prompt instead of error
-        if (response.error.includes('unauthorized') || response.error.includes('bearer token')) {
-          setCommunities([]);
-          setLoading(false);
-          return;
-        }
-        throw new Error(response.error);
-      }
+      if (response.error) throw new Error(response.error);
       setCommunities(response.data || []);
     } catch (error) {
       console.error('Error fetching communities:', error);
-      // Don't show error toast for auth issues
-      const errorMsg = error instanceof Error ? error.message : '';
-      if (!errorMsg.includes('unauthorized') && !errorMsg.includes('bearer token')) {
-        toast({
-          title: "Error",
-          description: "Gagal mengambil data komunitas",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: 'Error',
+        description: 'Gagal mengambil data komunitas',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -104,12 +121,6 @@ export default function CommunitiesPage() {
     }
   };
 
-  const parseTags = (tagsString?: string): string[] => {
-    if (!tagsString) return [];
-    const cleaned = tagsString.replace(/^\{|\}$/g, '');
-    return cleaned ? cleaned.split(',').map(t => t.trim()) : [];
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -134,6 +145,26 @@ export default function CommunitiesPage() {
             </p>
           </div>
 
+          {myCommunities.length > 0 && (
+            <div className="mb-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">Komunitas Saya</h2>
+              <div className="flex flex-wrap gap-2">
+                {myCommunities.map((c) => (
+                  <Button
+                    key={c.id}
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => router.push(`/komunitas/${c.id}`)}
+                  >
+                    <Users className="h-3.5 w-3.5 mr-1.5" />
+                    {c.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-4 mb-8">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -156,21 +187,12 @@ export default function CommunitiesPage() {
             <Card className="max-w-md mx-auto">
               <CardContent className="py-12 text-center">
                 <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {!user ? 'Login untuk Melihat Komunitas' : 'Belum Ada Komunitas'}
-                </h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Belum Ada Komunitas</h3>
                 <p className="text-gray-600 mb-4">
-                  {!user
-                    ? 'Silakan login terlebih dahulu untuk melihat dan bergabung dengan komunitas'
-                    : searchQuery
+                  {searchQuery
                     ? 'Tidak ditemukan komunitas dengan kata kunci tersebut'
-                    : 'Belum ada komunitas yang dibuat. Jadilah yang pertama!'}
+                    : 'Belum ada komunitas yang dibuat'}
                 </p>
-                {!user && (
-                  <Button onClick={() => router.push('/auth')}>
-                    Login Sekarang
-                  </Button>
-                )}
               </CardContent>
             </Card>
           ) : (
@@ -179,29 +201,24 @@ export default function CommunitiesPage() {
                 <Card
                   key={community.id}
                   className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => router.push(`/forum?community=${community.id}`)}
+                  onClick={() => router.push(`/komunitas/${community.id}`)}
                 >
                   <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary/10 rounded-lg">
-                          <Users className="h-6 w-6 text-primary" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-lg">{community.name}</CardTitle>
-                          <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                            {community.is_private ? (
-                              <>
-                                <Lock className="h-3 w-3" />
-                                Privat
-                              </>
-                            ) : (
-                              <>
-                                <Globe className="h-3 w-3" />
-                                Publik
-                              </>
-                            )}
-                          </div>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Users className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{community.name}</CardTitle>
+                        <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {community.member_count} anggota
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3" />
+                            {community.thread_count} diskusi
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -221,9 +238,17 @@ export default function CommunitiesPage() {
                         ))}
                       </div>
                     )}
-                    <div className="mt-4 flex items-center text-sm text-primary">
-                      <MessageSquare className="h-4 w-4 mr-1" />
-                      Lihat Diskusi
+                    <div className="mt-4 flex items-center justify-between text-sm">
+                      <span className="flex items-center text-primary">
+                        <MessageSquare className="h-4 w-4 mr-1" />
+                        Lihat Diskusi
+                      </span>
+                      {lastActivityLabel(community.last_activity_at) && (
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Clock className="h-3 w-3" />
+                          {lastActivityLabel(community.last_activity_at)}
+                        </span>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

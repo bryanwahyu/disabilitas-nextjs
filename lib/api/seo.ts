@@ -138,8 +138,31 @@ export async function getEventForSEO(id: string) {
   return seoFetch<EventSEO>(`/events/${id}`);
 }
 
-export async function getCommunityForSEO(id: string) {
-  return seoFetch<CommunitySEO>(`/communities/${id}`);
+// Go serialises Community fields in PascalCase (no json tags on the entity)
+interface RawCommunitySEO {
+  ID?: string;
+  id?: string;
+  Name?: string;
+  name?: string;
+  Description?: string;
+  description?: string;
+  Tags?: string;
+  tags?: string;
+  CreatedAt?: string;
+  created_at?: string;
+}
+
+export async function getCommunityForSEO(id: string): Promise<CommunitySEO | null> {
+  const raw = await seoFetch<RawCommunitySEO>(`/public/communities/${id}`);
+  const cid = raw?.ID || raw?.id;
+  if (!raw || !cid) return null;
+  return {
+    id: cid,
+    name: raw.Name || raw.name || '',
+    description: raw.Description || raw.description,
+    tags: raw.Tags || raw.tags,
+    created_at: raw.CreatedAt || raw.created_at || '',
+  };
 }
 
 export async function getAllArticleSlugs() {
@@ -150,8 +173,11 @@ export async function getAllEventIds() {
   return seoFetchList<EventListItem>('/events?limit=1000');
 }
 
-export async function getAllCommunityIds() {
-  return seoFetchList<CommunityListItem>('/communities?limit=1000');
+export async function getAllCommunityIds(): Promise<CommunityListItem[]> {
+  const raw = await seoFetchList<RawCommunitySEO>('/public/communities?per_page=100');
+  return raw
+    .map((c) => ({ id: c.ID || c.id || '', created_at: c.CreatedAt || c.created_at || '' }))
+    .filter((c) => c.id);
 }
 
 type TherapyLocationDetailEnvelope =
