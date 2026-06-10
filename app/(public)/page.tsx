@@ -8,6 +8,8 @@ import ArticlesSection from '@/components/ArticlesSection';
 import CommunitySection from '@/components/CommunitySection';
 import TherapyLocationRegistrationForm from '@/components/TherapyLocationRegistrationForm';
 import ContactSection from '@/components/ContactSection';
+import HowItWorks from '@/components/HowItWorks';
+import CTASection from '@/components/CTASection';
 import {
   getHomepageStats,
   getHomepageArticles,
@@ -72,11 +74,13 @@ export default async function HomePage() {
     <div className="min-h-screen bg-white">
       <HeroSection initialStats={stats} />
       <ServicesSection />
+      <HowItWorks />
       <TherapyLocationFinder previewLimit={6} />
       <TrustSection />
       <FounderStorySection />
       <ArticlesSection initialArticles={articles} />
       <CommunitySection initialThreads={threads} initialEvents={events} />
+      <CTASection />
       <TherapyLocationRegistrationForm />
       <ContactSection />
     </div>

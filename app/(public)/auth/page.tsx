@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -270,6 +271,17 @@ export default function AuthPage() {
                 <p className="text-xs text-green-600 mt-1">Password memenuhi syarat</p>
               )}
             </div>
+
+            {isLogin && (
+              <div className="text-right -mt-1">
+                <Link
+                  href="/reset-password"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Lupa Password?
+                </Link>
+              </div>
+            )}
 
             <Button
               type="submit"

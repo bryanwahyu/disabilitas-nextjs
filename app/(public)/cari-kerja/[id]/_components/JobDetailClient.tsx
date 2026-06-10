@@ -30,6 +30,8 @@ import {
   Tag,
   Users,
   CalendarClock,
+  Accessibility,
+  MessageCircle,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import type { JobDetail } from '@/lib/api/types';
@@ -68,6 +70,14 @@ function formatDate(dateStr: string) {
 
 function isDeadlinePassed(deadline: string) {
   return new Date(deadline) < new Date();
+}
+
+function buildWaLink(contactWa: string): string {
+  const trimmed = contactWa.trim();
+  if (trimmed.startsWith('http')) return trimmed;
+  let digits = trimmed.replace(/\D/g, '');
+  if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+  return `https://wa.me/${digits}`;
 }
 
 function getDeadlineCountdown(deadline: string) {
@@ -448,9 +458,23 @@ export default function JobDetailClient() {
             </Card>
           )}
 
+          {/* Accessibility Notes Card */}
+          {job.accessibility_notes && (
+            <Card className="mb-6 border-emerald-200 bg-emerald-50/50">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Accessibility className="w-5 h-5 text-emerald-700" />
+                  <h2 className="text-lg font-semibold text-gray-900">Dukungan Aksesibilitas</h2>
+                </div>
+                <p className="text-gray-700 whitespace-pre-line">{job.accessibility_notes}</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Apply Button */}
           {!deadlinePassed ? (
             <div className="border-t pt-6">
+              <div className="flex flex-col sm:flex-row gap-3">
               <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
                 <DialogTrigger asChild>
                   <Button size="lg" className="w-full sm:w-auto">
@@ -486,6 +510,20 @@ export default function JobDetailClient() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              {job.contact_wa && (
+                <a
+                  href={buildWaLink(job.contact_wa)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto"
+                >
+                  <Button size="lg" variant="outline" className="w-full border-green-600 text-green-700 hover:bg-green-50">
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Tanya via WhatsApp
+                  </Button>
+                </a>
+              )}
+              </div>
               {!user && (
                 <p className="text-sm text-gray-500 mt-3">
                   <button

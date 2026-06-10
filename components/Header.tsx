@@ -96,6 +96,14 @@ const Header = () => {
                 Jadwal
               </Link>
             )}
+            {user?.role === 'orang_tua' && (
+              <Link
+                href="/anak-saya"
+                className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
+              >
+                Anak Saya
+              </Link>
+            )}
             {isTherapist && (
               <Link
                 href="/dashboard"
@@ -200,6 +208,16 @@ const Header = () => {
                 >
                   <Calendar size={16} className="inline mr-2" />
                   Jadwal Saya
+                </Link>
+              )}
+              {user?.role === 'orang_tua' && (
+                <Link
+                  href="/anak-saya"
+                  className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <User size={16} className="inline mr-2" />
+                  Anak Saya
                 </Link>
               )}
               {isTherapist && (

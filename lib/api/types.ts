@@ -715,6 +715,8 @@ export interface JobSummary {
   salary_max?: number;
   salary_currency?: string;
   disability_types?: string;
+  accessibility_notes?: string;
+  contact_wa?: string;
   experience_level?: string;
   status: string;
   deadline_apply: string;
@@ -888,4 +890,71 @@ export interface RecommendationMeta {
   algorithm: string;
   lat: number;
   lng: number;
+}
+
+// Progress tracking anak (Sprint 3)
+export interface ChildProfile {
+  id: string;
+  parent_user_id: string;
+  full_name: string;
+  date_of_birth?: string;
+  disability_types?: string;
+  assistive_needs?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChildProfileInput {
+  full_name: string;
+  date_of_birth?: string;
+  disability_types?: string;
+  assistive_needs?: string;
+  notes?: string;
+}
+
+export interface SessionNote {
+  id: string;
+  child_id: string;
+  therapist_id: string;
+  appointment_id?: string;
+  session_date: string;
+  activity: string;
+  observation?: string;
+  progress_rating: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionNoteInput {
+  child_id: string;
+  session_date?: string;
+  activity: string;
+  observation?: string;
+  progress_rating: number;
+  notes?: string;
+}
+
+export interface ChildMilestone {
+  id: string;
+  child_id: string;
+  milestone_name: string;
+  achieved_at: string;
+  recorded_by: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface ChildMilestoneInput {
+  milestone_name: string;
+  achieved_at?: string;
+  notes?: string;
+}
+
+export interface ProgressMonthlySummary {
+  month: string;
+  session_count: number;
+  avg_rating: number;
+  milestone_count: number;
 }

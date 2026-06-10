@@ -64,6 +64,13 @@ import type {
   TherapyProvider,
   LocationTherapistAffiliation,
   RecommendedLocation,
+  ChildProfile,
+  ChildProfileInput,
+  SessionNote,
+  SessionNoteInput,
+  ChildMilestone,
+  ChildMilestoneInput,
+  ProgressMonthlySummary,
 } from './types';
 
 /** Shape returned by the /me endpoint (PascalCase or snake_case from Go backend) */
@@ -551,12 +558,14 @@ class ApiClient {
       }
     },
     jobs: {
-      list: async (params: { q?: string; work_type?: string; employment_type?: string; location?: string; limit?: number; offset?: number } = {}) => {
+      list: async (params: { q?: string; work_type?: string; employment_type?: string; location?: string; disability_type?: string; remote?: boolean; limit?: number; offset?: number } = {}) => {
         const qs = new URLSearchParams();
         if (params.q) qs.set('q', params.q);
         if (params.work_type) qs.set('work_type', params.work_type);
         if (params.employment_type) qs.set('employment_type', params.employment_type);
         if (params.location) qs.set('location', params.location);
+        if (params.disability_type) qs.set('disability_type', params.disability_type);
+        if (params.remote) qs.set('remote', 'true');
         if (params.limit) qs.set('limit', String(params.limit));
         if (params.offset) qs.set('offset', String(params.offset));
         const suffix = qs.toString() ? `?${qs.toString()}` : '';
@@ -1001,6 +1010,69 @@ class ApiClient {
     getTherapistAppointments: async (therapistId: string) => {
       return await this.makeRequest<Appointment[]>(`/therapists/${therapistId}/appointments`);
     }
+  };
+
+  // Child profiles & progress tracking (orang_tua)
+  children = {
+    list: async () => {
+      return await this.makeRequest<ChildProfile[]>('/me/children');
+    },
+
+    get: async (id: string) => {
+      return await this.makeRequest<ChildProfile>(`/me/children/${id}`);
+    },
+
+    create: async (data: ChildProfileInput) => {
+      return await this.makeRequest<ChildProfile>('/me/children', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    update: async (id: string, data: Partial<ChildProfileInput>) => {
+      return await this.makeRequest<ChildProfile>(`/me/children/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    delete: async (id: string) => {
+      return await this.makeRequest<void>(`/me/children/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    sessionNotes: async (childId: string) => {
+      return await this.makeRequest<SessionNote[]>(`/me/children/${childId}/session-notes`);
+    },
+
+    progressSummary: async (childId: string) => {
+      return await this.makeRequest<ProgressMonthlySummary[]>(`/me/children/${childId}/progress-summary`);
+    },
+
+    milestones: async (childId: string) => {
+      return await this.makeRequest<ChildMilestone[]>(`/me/children/${childId}/milestones`);
+    },
+
+    createMilestone: async (childId: string, data: ChildMilestoneInput) => {
+      return await this.makeRequest<ChildMilestone>(`/me/children/${childId}/milestones`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // Therapist side: children of the appointment's booker (to pick for a session note)
+    forAppointment: async (appointmentId: string) => {
+      return await this.makeRequest<ChildProfile[]>(`/appointments/${appointmentId}/children`);
+    },
+
+    // Therapist side: record a session note on an appointment
+    createSessionNote: async (appointmentId: string, data: SessionNoteInput) => {
+      return await this.makeRequest<SessionNote>(`/appointments/${appointmentId}/session-note`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
   };
 
   // Schedule methods (therapist)

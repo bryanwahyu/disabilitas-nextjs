@@ -28,7 +28,11 @@ interface TherapyProvider {
   certifications?: string;
   languages?: string;
   rate_per_session?: number;
+  rate_min?: number;
+  rate_max?: number;
+  bpjs_accepted?: boolean;
   consultation_methods?: string;
+  is_verified?: boolean;
   locations?: Array<{
     id: string;
     name: string;
@@ -47,6 +51,22 @@ function formatCurrency(amount: number): string {
     currency: 'IDR',
     minimumFractionDigits: 0,
   }).format(amount);
+}
+
+const methodLabels: Record<string, string> = {
+  online: 'Online',
+  home_visit: 'Home Visit',
+  'home visit': 'Home Visit',
+  klinik: 'Klinik',
+  offline: 'Tatap Muka',
+};
+
+function formatRateRange(p: TherapyProvider): string | null {
+  if (p.rate_min && p.rate_max && p.rate_min !== p.rate_max) {
+    return `${formatCurrency(p.rate_min)} – ${formatCurrency(p.rate_max)}`;
+  }
+  const single = p.rate_min || p.rate_max || p.rate_per_session;
+  return single ? formatCurrency(single) : null;
 }
 
 function getDateRange(): { from: string; to: string } {
@@ -165,20 +185,39 @@ export default function TherapistDetailPage() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">
                   {provider.full_name || provider.email}
                 </h1>
-                <Badge variant={provider.role === 'therapist_independent' ? 'default' : 'secondary'}>
-                  {provider.role === 'therapist_independent' ? 'Terapis Independen' : 'Yayasan/Klinik'}
-                </Badge>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant={provider.role === 'therapist_independent' ? 'default' : 'secondary'}>
+                    {provider.role === 'therapist_independent' ? 'Terapis Independen' : 'Yayasan/Klinik'}
+                  </Badge>
+                  {provider.is_verified && (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 flex items-center gap-1">
+                      <CheckCircle size={12} /> Terverifikasi
+                    </Badge>
+                  )}
+                  {provider.bpjs_accepted && (
+                    <Badge className="bg-teal-100 text-teal-800 border-teal-200">Menerima BPJS</Badge>
+                  )}
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {provider.specialization && (
-                <div className="flex items-center text-sm text-gray-700">
-                  <Briefcase size={16} className="mr-2 text-gray-400" />
-                  <span>{provider.specialization}</span>
+            {provider.specialization && (
+              <div className="mb-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Briefcase size={14} className="text-primary" />
+                  <span className="text-sm font-medium text-gray-700">Spesialisasi</span>
                 </div>
-              )}
+                <div className="flex flex-wrap gap-1.5">
+                  {provider.specialization.split(',').map((s) => (
+                    <span key={s.trim()} className="text-sm bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-3 py-1">
+                      {s.trim()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {provider.city && (
                 <div className="flex items-center text-sm text-gray-700">
                   <MapPin size={16} className="mr-2 text-gray-400" />
@@ -191,10 +230,10 @@ export default function TherapistDetailPage() {
                   <span>{provider.experience_years} tahun pengalaman</span>
                 </div>
               )}
-              {provider.rate_per_session != null && provider.rate_per_session > 0 && (
+              {formatRateRange(provider) && (
                 <div className="flex items-center text-sm text-gray-700">
                   <DollarSign size={16} className="mr-2 text-gray-400" />
-                  <span>{formatCurrency(provider.rate_per_session)}/sesi</span>
+                  <span>{formatRateRange(provider)}/sesi</span>
                 </div>
               )}
               {provider.email && (
@@ -215,7 +254,9 @@ export default function TherapistDetailPage() {
               <div className="mt-4">
                 <span className="text-sm font-medium text-gray-700 mr-2">Metode Konsultasi:</span>
                 {provider.consultation_methods.split(',').map((m) => (
-                  <Badge key={m.trim()} variant="outline" className="mr-1 text-xs">{m.trim()}</Badge>
+                  <Badge key={m.trim()} variant="outline" className="mr-1 text-xs">
+                    {methodLabels[m.trim().toLowerCase()] || m.trim()}
+                  </Badge>
                 ))}
               </div>
             )}

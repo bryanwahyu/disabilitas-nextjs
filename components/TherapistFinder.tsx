@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, CheckCircle, Phone, Globe, Mail, Loader2, Clock, ArrowRight } from 'lucide-react';
+import { MapPin, CheckCircle, Phone, Globe, Mail, Loader2, Clock, ArrowRight, Wifi, Home, Building2, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -30,6 +30,10 @@ interface TherapyLocation {
   email: string | null;
   website: string | null;
   is_verified: boolean;
+  bpjs_accepted: boolean;
+  consultation_methods: string | null;
+  rate_min: number | null;
+  rate_max: number | null;
   services: string[];
   open_hours?: OpenHour[];
 }
@@ -46,6 +50,8 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedMethod, setSelectedMethod] = useState('all');
+  const [bpjsOnly, setBpjsOnly] = useState(false);
   const [locations, setLocations] = useState<TherapyLocation[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -53,7 +59,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
   const [loadingMore, setLoadingMore] = useState(false);
   const { toast } = useToast();
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const fetchRef = useRef({ search: '', type: 'all' });
+  const fetchRef = useRef({ search: '', type: 'all', method: 'all', bpjs: false });
 
   const locationTypes = [
     { value: 'yayasan', label: 'Yayasan' },
@@ -66,7 +72,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
 
   const hasMore = locations.length < total;
 
-  const fetchLocations = useCallback(async (currentOffset: number, search: string, type: string, append: boolean) => {
+  const fetchLocations = useCallback(async (currentOffset: number, search: string, type: string, method: string, bpjs: boolean, append: boolean) => {
     if (append) {
       setLoadingMore(true);
     } else {
@@ -76,6 +82,8 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
       const qs = new URLSearchParams();
       if (search) qs.set('search', search);
       if (type !== 'all') qs.set('type', type);
+      if (method !== 'all') qs.set('method', method);
+      if (bpjs) qs.set('bpjs', 'true');
       qs.set('limit', String(isPreview ? (previewLimit ?? PAGE_SIZE) : PAGE_SIZE));
       qs.set('offset', String(currentOffset));
 
@@ -106,16 +114,16 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
     }
   }, [toast, isPreview, previewLimit]);
 
-  // Initial fetch + reset when search/type changes (debounced)
+  // Initial fetch + reset when search/type/method/bpjs changes (debounced)
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchRef.current = { search: searchTerm, type: selectedType };
+      fetchRef.current = { search: searchTerm, type: selectedType, method: selectedMethod, bpjs: bpjsOnly };
       setOffset(0);
-      fetchLocations(0, searchTerm, selectedType, false);
+      fetchLocations(0, searchTerm, selectedType, selectedMethod, bpjsOnly, false);
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, selectedType, fetchLocations]);
+  }, [searchTerm, selectedType, selectedMethod, bpjsOnly, fetchLocations]);
 
   // Infinite scroll — hanya aktif di mode full (bukan preview)
   useEffect(() => {
@@ -126,8 +134,8 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          const { search, type } = fetchRef.current;
-          fetchLocations(offset, search, type, true);
+          const { search, type, method, bpjs } = fetchRef.current;
+          fetchLocations(offset, search, type, method, bpjs, true);
         }
       },
       { rootMargin: '200px' }
@@ -151,12 +159,20 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
                   {loc.type_label}
                 </CardDescription>
               </div>
-              {loc.is_verified && (
-                <div className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 flex items-center gap-1">
-                  <CheckCircle size={12} />
-                  Terverifikasi
-                </div>
-              )}
+              <div className="flex flex-col gap-1 items-end">
+                {loc.is_verified && (
+                  <div className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 flex items-center gap-1">
+                    <CheckCircle size={12} />
+                    Terverifikasi
+                  </div>
+                )}
+                {loc.bpjs_accepted && (
+                  <div className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
+                    <ShieldCheck size={12} />
+                    BPJS
+                  </div>
+                )}
+              </div>
             </div>
           </CardHeader>
 

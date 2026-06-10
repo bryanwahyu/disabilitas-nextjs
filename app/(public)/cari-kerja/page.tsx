@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Briefcase, MapPin, Clock, Eye, Search, ArrowLeft, Building2, Banknote } from 'lucide-react';
+import { Briefcase, MapPin, Clock, Eye, Search, ArrowLeft, Building2, Banknote, Accessibility } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const WORK_TYPES = [
@@ -31,6 +31,16 @@ const EMPLOYMENT_TYPES = [
   { value: 'part_time', label: 'Part Time' },
   { value: 'contract', label: 'Kontrak' },
   { value: 'internship', label: 'Magang' },
+];
+
+const DISABILITY_TYPES = [
+  { value: 'all', label: 'Semua Disabilitas' },
+  { value: 'fisik', label: 'Disabilitas Fisik' },
+  { value: 'netra', label: 'Disabilitas Netra' },
+  { value: 'rungu', label: 'Disabilitas Rungu' },
+  { value: 'intelektual', label: 'Disabilitas Intelektual' },
+  { value: 'mental', label: 'Disabilitas Mental' },
+  { value: 'sensorik', label: 'Disabilitas Sensorik' },
 ];
 
 function formatSalary(min?: number, max?: number, currency?: string) {
@@ -151,13 +161,14 @@ export default function CariKerjaPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkType, setSelectedWorkType] = useState('all');
   const [selectedEmploymentType, setSelectedEmploymentType] = useState('all');
+  const [selectedDisability, setSelectedDisability] = useState('all');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 12;
 
   useEffect(() => {
     fetchJobs();
-  }, [selectedWorkType, selectedEmploymentType, page]);
+  }, [selectedWorkType, selectedEmploymentType, selectedDisability, page]);
 
   const fetchJobs = async () => {
     try {
@@ -166,6 +177,7 @@ export default function CariKerjaPage() {
         q?: string;
         work_type?: string;
         employment_type?: string;
+        disability_type?: string;
         limit: number;
         offset: number;
       } = {
@@ -174,6 +186,7 @@ export default function CariKerjaPage() {
       };
       if (selectedWorkType !== 'all') params.work_type = selectedWorkType;
       if (selectedEmploymentType !== 'all') params.employment_type = selectedEmploymentType;
+      if (selectedDisability !== 'all') params.disability_type = selectedDisability;
       if (searchQuery.trim()) params.q = searchQuery.trim();
 
       const response = await apiClient.publicJobs.list(params);
@@ -256,6 +269,18 @@ export default function CariKerjaPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={selectedDisability} onValueChange={(v) => { setSelectedDisability(v); setPage(1); }}>
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="Jenis Disabilitas" />
+            </SelectTrigger>
+            <SelectContent>
+              {DISABILITY_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Loading State */}
@@ -318,6 +343,12 @@ export default function CariKerjaPage() {
                           <div className="flex flex-wrap gap-1.5">
                             <Badge className={workBadge.className}>{workBadge.label}</Badge>
                             <Badge variant="outline">{getEmploymentTypeBadge(job.employment_type)}</Badge>
+                            {job.accessibility_notes && (
+                              <Badge className="bg-emerald-100 text-emerald-800 gap-1">
+                                <Accessibility className="w-3 h-3" />
+                                Akses Inklusif
+                              </Badge>
+                            )}
                             {deadlinePassed && (
                               <Badge variant="destructive">Ditutup</Badge>
                             )}

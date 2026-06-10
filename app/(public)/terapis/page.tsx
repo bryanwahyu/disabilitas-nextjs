@@ -25,7 +25,11 @@ interface TherapyProvider {
   specialization?: string;
   experience_years?: number;
   rate_per_session?: number;
+  rate_min?: number;
+  rate_max?: number;
+  bpjs_accepted?: boolean;
   consultation_methods?: string;
+  is_verified?: boolean;
 }
 
 interface TherapyLocationPublic {
@@ -38,6 +42,10 @@ interface TherapyLocationPublic {
   description: string | null;
   phone: string | null;
   is_verified: boolean;
+  bpjs_accepted?: boolean;
+  consultation_methods?: string | null;
+  rate_min?: number | null;
+  rate_max?: number | null;
   services: string[];
   open_hours?: Array<{ day_of_week: number; open_time: string; close_time: string }>;
 }
@@ -57,12 +65,38 @@ const methodIcons: Record<string, typeof Stethoscope> = {
   'online': Video,
   'chat': MessageCircle,
   'home visit': Home,
+  'home_visit': Home,
+  'klinik': Building2,
+  'offline': Building2,
 };
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', minimumFractionDigits: 0,
-  }).format(amount);
+const consultMethods = [
+  { value: 'online', label: 'Online' },
+  { value: 'home_visit', label: 'Home Visit' },
+  { value: 'klinik', label: 'Datang ke Klinik' },
+];
+
+const rateOptions = [
+  { value: '100000', label: '≤ Rp 100 rb/sesi' },
+  { value: '200000', label: '≤ Rp 200 rb/sesi' },
+  { value: '300000', label: '≤ Rp 300 rb/sesi' },
+  { value: '500000', label: '≤ Rp 500 rb/sesi' },
+];
+
+const methodLabels: Record<string, string> = {
+  online: 'Online',
+  home_visit: 'Home Visit',
+  'home visit': 'Home Visit',
+  klinik: 'Klinik',
+  offline: 'Tatap Muka',
+};
+
+function formatRateRange(min?: number | null, max?: number | null, fallback?: number | null): string | null {
+  const compact = (n: number) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 0 }).format(n);
+  if (min && max && min !== max) return `Rp ${compact(min)} – Rp ${compact(max)}`;
+  const single = min || max || fallback;
+  if (single) return `Rp ${compact(single)}`;
+  return null;
 }
 
 type TabMode = 'therapists' | 'locations';
@@ -71,6 +105,9 @@ export default function TerapisPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedMethod, setSelectedMethod] = useState('all');
+  const [maxRate, setMaxRate] = useState('all');
+  const [bpjsOnly, setBpjsOnly] = useState(false);
   const [tab, setTab] = useState<TabMode>('locations');
   const [therapists, setTherapists] = useState<TherapyProvider[]>([]);
   const [locations, setLocations] = useState<TherapyLocationPublic[]>([]);
@@ -80,16 +117,19 @@ export default function TerapisPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const { toast } = useToast();
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const fetchRef = useRef({ search: '', type: 'all' });
+  const fetchRef = useRef({ search: '', type: 'all', method: 'all', rate: 'all', bpjs: false });
 
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
   const hasMore = tab === 'locations' ? locations.length < total : false;
 
-  const fetchTherapists = useCallback(async (search: string) => {
+  const fetchTherapists = useCallback(async (search: string, method: string, rate: string, bpjs: boolean) => {
     setLoading(true);
     try {
       const qs = new URLSearchParams();
       if (search) qs.set('q', search);
+      if (method !== 'all') qs.set('method', method);
+      if (rate !== 'all') qs.set('rate_max', rate);
+      if (bpjs) qs.set('bpjs', 'true');
       qs.set('per_page', '50');
 
       const res = await fetch(`${baseUrl}/therapy/providers?${qs.toString()}`);
@@ -107,13 +147,16 @@ export default function TerapisPage() {
     }
   }, [baseUrl, toast]);
 
-  const fetchLocations = useCallback(async (currentOffset: number, search: string, type: string, append: boolean) => {
+  const fetchLocations = useCallback(async (currentOffset: number, search: string, type: string, method: string, rate: string, bpjs: boolean, append: boolean) => {
     if (append) setLoadingMore(true);
     else setLoading(true);
     try {
       const qs = new URLSearchParams();
       if (search) qs.set('search', search);
       if (type !== 'all') qs.set('type', type);
+      if (method !== 'all') qs.set('method', method);
+      if (rate !== 'all') qs.set('rate_max', rate);
+      if (bpjs) qs.set('bpjs', 'true');
       qs.set('limit', String(PAGE_SIZE));
       qs.set('offset', String(currentOffset));
 
@@ -136,13 +179,13 @@ export default function TerapisPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchRef.current = { search: searchTerm, type: selectedType };
+      fetchRef.current = { search: searchTerm, type: selectedType, method: selectedMethod, rate: maxRate, bpjs: bpjsOnly };
       setOffset(0);
-      if (tab === 'therapists') fetchTherapists(searchTerm);
-      else fetchLocations(0, searchTerm, selectedType, false);
+      if (tab === 'therapists') fetchTherapists(searchTerm, selectedMethod, maxRate, bpjsOnly);
+      else fetchLocations(0, searchTerm, selectedType, selectedMethod, maxRate, bpjsOnly, false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchTerm, selectedType, tab, fetchTherapists, fetchLocations]);
+  }, [searchTerm, selectedType, selectedMethod, maxRate, bpjsOnly, tab, fetchTherapists, fetchLocations]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -150,8 +193,8 @@ export default function TerapisPage() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          const { search, type } = fetchRef.current;
-          fetchLocations(offset, search, type, true);
+          const { search, type, method, rate, bpjs } = fetchRef.current;
+          fetchLocations(offset, search, type, method, rate, bpjs, true);
         }
       },
       { rootMargin: '200px' }
@@ -171,6 +214,17 @@ export default function TerapisPage() {
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
             Temukan terapis profesional untuk konsultasi langsung, atau cari lokasi terapi terdekat
           </p>
+        </div>
+
+        {/* Banner orang tua baru */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold text-amber-900 text-sm">Baru pertama kali mencari terapis?</p>
+            <p className="text-sm text-amber-700 mt-0.5">Pelajari cara memilih terapis yang tepat untuk kebutuhan anak Anda.</p>
+          </div>
+          <a href="/cara-kerja" className="flex-shrink-0 text-sm bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg transition-colors font-medium">
+            Pelajari Cara Kerja
+          </a>
         </div>
 
         {/* Tab Switch */}
@@ -231,6 +285,45 @@ export default function TerapisPage() {
                 </Select>
               </div>
             )}
+          </div>
+
+          {/* Filter akses: metode konsultasi, biaya, BPJS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Metode Konsultasi</label>
+              <Select value={selectedMethod} onValueChange={setSelectedMethod}>
+                <SelectTrigger><SelectValue placeholder="Semua Metode" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Metode</SelectItem>
+                  {consultMethods.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Biaya per Sesi</label>
+              <Select value={maxRate} onValueChange={setMaxRate}>
+                <SelectTrigger><SelectValue placeholder="Semua Harga" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Harga</SelectItem>
+                  {rateOptions.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none bg-gray-50 hover:bg-gray-100 transition-colors border border-gray-200 rounded-lg px-4 py-2.5 w-full">
+                <input
+                  type="checkbox"
+                  checked={bpjsOnly}
+                  onChange={(e) => setBpjsOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm font-medium text-gray-700">Menerima BPJS</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -320,17 +413,41 @@ function TherapistCard({ therapist: t, router }: { therapist: TherapyProvider; r
             <CardTitle className="text-base font-semibold text-gray-900 truncate">
               {t.full_name || t.email}
             </CardTitle>
-            <Badge variant={isIndependent ? 'default' : 'secondary'} className="text-xs mt-1">
-              {isIndependent ? 'Terapis Independen' : 'Pemilik Yayasan/Klinik'}
-            </Badge>
+            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+              <Badge variant={isIndependent ? 'default' : 'secondary'} className="text-xs">
+                {isIndependent ? 'Terapis Independen' : 'Pemilik Yayasan/Klinik'}
+              </Badge>
+              {t.is_verified && (
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs flex items-center gap-1">
+                  <CheckCircle size={10} /> Terverifikasi
+                </Badge>
+              )}
+              {t.bpjs_accepted && (
+                <Badge className="bg-teal-100 text-teal-800 border-teal-200 text-xs">BPJS</Badge>
+              )}
+            </div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-2.5 flex-1 flex flex-col">
         {t.specialization && (
-          <div className="flex items-center text-sm">
-            <Briefcase size={14} className="mr-2 text-primary flex-shrink-0" />
-            <span className="font-medium text-gray-800">{t.specialization}</span>
+          <div>
+            <div className="flex items-center gap-1 mb-1.5">
+              <Briefcase size={13} className="text-primary flex-shrink-0" />
+              <span className="text-xs font-medium text-gray-500">Spesialisasi</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {t.specialization.split(',').slice(0, 3).map((s) => (
+                <span key={s.trim()} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2.5 py-0.5">
+                  {s.trim()}
+                </span>
+              ))}
+              {t.specialization.split(',').length > 3 && (
+                <span className="text-xs bg-gray-100 text-gray-500 rounded-full px-2.5 py-0.5">
+                  +{t.specialization.split(',').length - 3}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -348,10 +465,10 @@ function TherapistCard({ therapist: t, router }: { therapist: TherapyProvider; r
           </div>
         )}
 
-        {t.rate_per_session != null && t.rate_per_session > 0 && (
+        {formatRateRange(t.rate_min, t.rate_max, t.rate_per_session) && (
           <div className="flex items-center text-sm">
             <DollarSign size={14} className="mr-2 text-green-500 flex-shrink-0" />
-            <span className="font-semibold text-green-700">{formatCurrency(t.rate_per_session)}<span className="font-normal text-gray-500">/sesi</span></span>
+            <span className="font-semibold text-green-700">{formatRateRange(t.rate_min, t.rate_max, t.rate_per_session)}<span className="font-normal text-gray-500">/sesi</span></span>
           </div>
         )}
 
@@ -365,7 +482,7 @@ function TherapistCard({ therapist: t, router }: { therapist: TherapyProvider; r
                 return (
                   <Badge key={m.trim()} variant="outline" className="text-xs gap-1">
                     <Icon size={10} />
-                    {m.trim()}
+                    {methodLabels[method] || m.trim()}
                   </Badge>
                 );
               })}
@@ -415,11 +532,16 @@ function LocationCard({ location: loc, router }: { location: TherapyLocationPubl
             <CardTitle className="text-base font-semibold text-gray-900 mb-1">{loc.name}</CardTitle>
             <p className="text-sm text-primary font-medium">{loc.type_label}</p>
           </div>
-          {loc.is_verified && (
-            <Badge className="bg-green-100 text-green-800 text-xs flex items-center gap-1">
-              <CheckCircle size={10} /> Terverifikasi
-            </Badge>
-          )}
+          <div className="flex flex-col items-end gap-1">
+            {loc.is_verified && (
+              <Badge className="bg-green-100 text-green-800 text-xs flex items-center gap-1">
+                <CheckCircle size={10} /> Terverifikasi
+              </Badge>
+            )}
+            {loc.bpjs_accepted && (
+              <Badge className="bg-teal-100 text-teal-800 border-teal-200 text-xs">BPJS</Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-2.5">
@@ -432,6 +554,28 @@ function LocationCard({ location: loc, router }: { location: TherapyLocationPubl
           <div className="flex items-center text-sm text-gray-600">
             <Phone size={14} className="mr-2 text-gray-400" />
             <span>{loc.phone}</span>
+          </div>
+        )}
+
+        {formatRateRange(loc.rate_min, loc.rate_max) && (
+          <div className="flex items-center text-sm">
+            <DollarSign size={14} className="mr-2 text-green-500 flex-shrink-0" />
+            <span className="font-semibold text-green-700">{formatRateRange(loc.rate_min, loc.rate_max)}<span className="font-normal text-gray-500">/sesi</span></span>
+          </div>
+        )}
+
+        {loc.consultation_methods && (
+          <div className="flex flex-wrap gap-1">
+            {loc.consultation_methods.split(',').map((m) => {
+              const method = m.trim().toLowerCase();
+              const Icon = methodIcons[method] || Heart;
+              return (
+                <Badge key={m.trim()} variant="outline" className="text-xs gap-1">
+                  <Icon size={10} />
+                  {methodLabels[method] || m.trim()}
+                </Badge>
+              );
+            })}
           </div>
         )}
 

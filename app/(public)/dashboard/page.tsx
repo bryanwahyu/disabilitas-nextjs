@@ -25,9 +25,28 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
-import type { Appointment } from '@/lib/api/types';
+import type { Appointment, ChildProfile } from '@/lib/api/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ClipboardList, Star } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -36,6 +55,7 @@ export default function DashboardPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pending');
+  const [sessionNoteAppt, setSessionNoteAppt] = useState<Appointment | null>(null);
 
   const isTherapist = user?.role === 'therapy' || user?.role === 'therapist_independent';
 
@@ -418,6 +438,7 @@ export default function DashboardPage() {
                       formatDate={formatDate}
                       formatTime={formatTime}
                       isPast
+                      onWriteSessionNote={() => setSessionNoteAppt(appointment)}
                     />
                   ))}
                 </div>
@@ -426,7 +447,196 @@ export default function DashboardPage() {
           </Tabs>
         </div>
       </main>
+
+      <SessionNoteDialog
+        appointment={sessionNoteAppt}
+        onClose={() => setSessionNoteAppt(null)}
+      />
     </div>
+  );
+}
+
+function SessionNoteDialog({
+  appointment,
+  onClose,
+}: {
+  appointment: Appointment | null;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [children, setChildren] = useState<ChildProfile[]>([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [childId, setChildId] = useState('');
+  const [sessionDate, setSessionDate] = useState('');
+  const [activity, setActivity] = useState('');
+  const [observation, setObservation] = useState('');
+  const [rating, setRating] = useState(0);
+  const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    if (!appointment) return;
+    setChildId('');
+    setActivity('');
+    setObservation('');
+    setRating(0);
+    setNotes('');
+    const apptDate = new Date(appointment.appointment_date);
+    setSessionDate(isNaN(apptDate.getTime()) ? '' : apptDate.toISOString().slice(0, 10));
+
+    setLoadingChildren(true);
+    apiClient.children
+      .forAppointment(appointment.id)
+      .then((res) => {
+        const list = res.data || [];
+        setChildren(list);
+        if (list.length === 1) setChildId(list[0].id);
+      })
+      .finally(() => setLoadingChildren(false));
+  }, [appointment]);
+
+  const handleSubmit = async () => {
+    if (!appointment) return;
+    if (!childId) {
+      toast({ title: 'Error', description: 'Pilih anak terlebih dahulu', variant: 'destructive' });
+      return;
+    }
+    if (!activity) {
+      toast({ title: 'Error', description: 'Aktivitas sesi harus diisi', variant: 'destructive' });
+      return;
+    }
+    if (rating < 1 || rating > 5) {
+      toast({ title: 'Error', description: 'Beri penilaian kemajuan 1-5', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await apiClient.children.createSessionNote(appointment.id, {
+        child_id: childId,
+        session_date: sessionDate || undefined,
+        activity,
+        observation: observation || undefined,
+        progress_rating: rating,
+        notes: notes || undefined,
+      });
+      if (response.error) throw new Error(response.error);
+      toast({ title: 'Berhasil', description: 'Catatan sesi tersimpan' });
+      onClose();
+    } catch (error: any) {
+      toast({
+        title: 'Gagal',
+        description: error.message || 'Gagal menyimpan catatan sesi',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!appointment} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Catat Sesi Terapi</DialogTitle>
+          <DialogDescription>
+            Catatan ini akan terlihat oleh orang tua di timeline perkembangan anak
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Anak *</Label>
+            {loadingChildren ? (
+              <p className="text-sm text-gray-500">Memuat daftar anak...</p>
+            ) : children.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                Klien belum menambahkan profil anak. Minta orang tua mengisi menu
+                &quot;Anak Saya&quot; terlebih dahulu.
+              </p>
+            ) : (
+              <Select value={childId} onValueChange={setChildId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih anak" />
+                </SelectTrigger>
+                <SelectContent>
+                  {children.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="session_date">Tanggal Sesi</Label>
+            <Input
+              id="session_date"
+              type="date"
+              value={sessionDate}
+              onChange={(e) => setSessionDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="session_activity">Aktivitas *</Label>
+            <Textarea
+              id="session_activity"
+              placeholder="Apa yang dilakukan selama sesi"
+              rows={2}
+              value={activity}
+              onChange={(e) => setActivity(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="session_observation">Observasi</Label>
+            <Textarea
+              id="session_observation"
+              placeholder="Respon dan perkembangan yang terlihat"
+              rows={2}
+              value={observation}
+              onChange={(e) => setObservation(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Penilaian Kemajuan *</Label>
+            <div className="flex items-center gap-1" role="radiogroup" aria-label="Penilaian kemajuan 1 sampai 5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <button
+                  key={i}
+                  type="button"
+                  role="radio"
+                  aria-checked={rating === i}
+                  aria-label={`${i} dari 5`}
+                  onClick={() => setRating(i)}
+                  className="p-1 rounded hover:bg-gray-100"
+                >
+                  <Star
+                    className={`h-6 w-6 ${i <= rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'}`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="session_notes">Catatan untuk Orang Tua</Label>
+            <Textarea
+              id="session_notes"
+              placeholder="Saran latihan di rumah, hal yang perlu diperhatikan"
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Batal
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving || children.length === 0}>
+            {saving ? 'Menyimpan...' : 'Simpan Catatan'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -437,6 +647,7 @@ function TherapistAppointmentCard({
   onConfirm,
   onComplete,
   onCancel,
+  onWriteSessionNote,
   getStatusBadge,
   formatDate,
   formatTime,
@@ -447,6 +658,7 @@ function TherapistAppointmentCard({
   onConfirm?: () => void;
   onComplete?: () => void;
   onCancel?: () => void;
+  onWriteSessionNote?: () => void;
   getStatusBadge: (status: string) => React.ReactNode;
   formatDate: (date: string) => string;
   formatTime: (date: string) => string;
@@ -505,6 +717,12 @@ function TherapistAppointmentCard({
           </div>
 
           {/* Actions */}
+          {isPast && onWriteSessionNote && (
+            <Button variant="outline" size="sm" onClick={onWriteSessionNote}>
+              <ClipboardList className="w-4 h-4 mr-1" />
+              Catat Sesi
+            </Button>
+          )}
           {!isPast && (
             <div className="flex gap-2">
               {appointment.status === 'pending' && onConfirm && (
