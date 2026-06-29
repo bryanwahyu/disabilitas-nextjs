@@ -242,6 +242,9 @@ export interface TherapyLocation {
   registrant_name?: string;
   registrant_email?: string;
   registrant_phone?: string;
+  // True when contact details (phone/email/address) are hidden because the
+  // viewer is not logged in. Set by the backend gating on public endpoints.
+  contact_locked?: boolean;
   services?: string[];
   open_hours?: LocationHour[];
   created_at: string;
@@ -613,6 +616,7 @@ export interface TherapyProvider {
   rate_per_session?: number;
   consultation_methods?: string;
   locations?: TherapyLocation[];
+  contact_locked?: boolean;
 }
 
 // Affiliation Types
@@ -988,4 +992,44 @@ export interface ContentReportWithContext extends ContentReport {
   content_author: string;
   reporter_email: string;
   community_id?: string;
+}
+
+// --- Pricing & Commission (markup admin) ---
+export type PriceItemType = 'therapy_service' | 'training';
+export type PriceStatus = 'pending' | 'approved' | 'rejected';
+
+export interface PriceItem {
+  id: string;
+  yayasan_id: string;
+  item_type: PriceItemType;
+  item_ref_id: string;
+  harga_dasar: number;
+  harga_jual?: number | null;
+  komisi?: number | null;
+  status: PriceStatus;
+  admin_note?: string | null;
+  submitted_by?: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommissionLedgerRow {
+  id: string;
+  price_item_id: string;
+  transaction_type: 'appointment' | 'training_booking';
+  transaction_ref_id: string;
+  yayasan_id: string;
+  harga_dasar: number;
+  harga_jual: number;
+  komisi_amount: number;
+  status: 'recorded' | 'settled';
+  created_at: string;
+}
+
+export interface CommissionReport {
+  items: CommissionLedgerRow[];
+  total_komisi: number;
+  total_transaksi: number;
 }

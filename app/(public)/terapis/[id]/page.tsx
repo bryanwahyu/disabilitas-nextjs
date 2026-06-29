@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  ArrowLeft, MapPin, Phone, Mail, Briefcase, Clock,
-  DollarSign, Calendar, Building2, CheckCircle, Globe, User
+  ArrowLeft, MapPin, Mail, Briefcase, Clock,
+  DollarSign, Calendar, Building2, CheckCircle, Globe, User, Lock
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { ScheduleDetail, AvailableSlot } from '@/lib/api/types';
@@ -33,6 +33,7 @@ interface TherapyProvider {
   bpjs_accepted?: boolean;
   consultation_methods?: string;
   is_verified?: boolean;
+  contact_locked?: boolean;
   locations?: Array<{
     id: string;
     name: string;
@@ -42,6 +43,7 @@ interface TherapyProvider {
     phone?: string;
     is_verified: boolean;
     services?: string[];
+    contact_locked?: boolean;
   }>;
 }
 
@@ -101,7 +103,11 @@ export default function TherapistDetailPage() {
 
   const fetchProvider = useCallback(async () => {
     try {
-      const res = await fetch(`${baseUrl}/therapy/providers?q=&with=locations&per_page=100`);
+      const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+      const token = typeof window !== 'undefined' ? localStorage.getItem(tokenKey) : null;
+      const res = await fetch(`${baseUrl}/therapy/providers?q=&with=locations&per_page=100`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const json = await res.json();
       const data = Array.isArray(json.data) ? json.data : [];
       const found = data.find((p: TherapyProvider) => p.id === therapistId);
@@ -236,12 +242,17 @@ export default function TherapistDetailPage() {
                   <span>{formatRateRange(provider)}/sesi</span>
                 </div>
               )}
-              {provider.email && (
+              {provider.email ? (
                 <div className="flex items-center text-sm text-gray-700">
                   <Mail size={16} className="mr-2 text-gray-400" />
                   <span>{provider.email}</span>
                 </div>
-              )}
+              ) : provider.contact_locked ? (
+                <Link href="/auth" className="flex items-center text-sm text-primary hover:underline">
+                  <Lock size={16} className="mr-2 flex-shrink-0" />
+                  <span>Daftar gratis untuk lihat kontak</span>
+                </Link>
+              ) : null}
               {provider.languages && (
                 <div className="flex items-center text-sm text-gray-700">
                   <Globe size={16} className="mr-2 text-gray-400" />
@@ -399,15 +410,24 @@ export default function TherapistDetailPage() {
                       )}
                     </div>
                     <div className="space-y-2 text-sm text-gray-600">
-                      <div className="flex items-start">
-                        <MapPin size={14} className="mr-2 mt-0.5 text-gray-400" />
-                        <span>{loc.address}{loc.city_name ? `, ${loc.city_name}` : ''}</span>
-                      </div>
-                      {loc.phone && (
-                        <div className="flex items-center">
-                          <Phone size={14} className="mr-2 text-gray-400" />
-                          <span>{loc.phone}</span>
-                        </div>
+                      {loc.contact_locked ? (
+                        <>
+                          <div className="flex items-start">
+                            <MapPin size={14} className="mr-2 mt-0.5 text-gray-400" />
+                            <span>{loc.city_name || 'Lokasi tersedia setelah daftar'}</span>
+                          </div>
+                          <Link href="/auth" className="flex items-center text-primary hover:underline">
+                            <Lock size={14} className="mr-2 flex-shrink-0" />
+                            <span>Daftar gratis untuk lihat alamat &amp; kontak</span>
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-start">
+                            <MapPin size={14} className="mr-2 mt-0.5 text-gray-400" />
+                            <span>{loc.address}{loc.city_name ? `, ${loc.city_name}` : ''}</span>
+                          </div>
+                        </>
                       )}
                     </div>
                     {loc.services && loc.services.length > 0 && (

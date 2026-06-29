@@ -136,8 +136,8 @@ const AppointmentManager = () => {
                       <h3 className="font-semibold text-lg">
                         Janji Temu #{appointment.id.slice(0, 8)}
                       </h3>
-                      <Badge {...getStatusBadge(appointment.status)}>
-                        {getStatusBadge(appointment.status).label}
+                      <Badge variant={getStatusBadge(appointment.status ?? 'pending').variant}>
+                        {getStatusBadge(appointment.status ?? 'pending').label}
                       </Badge>
                     </div>
 

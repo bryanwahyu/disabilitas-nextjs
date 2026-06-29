@@ -74,6 +74,8 @@ import type {
   ProgressMonthlySummary,
   ContentReport,
   ContentReportWithContext,
+  PriceItem,
+  CommissionReport,
 } from './types';
 
 /** Shape returned by the /me endpoint (PascalCase or snake_case from Go backend) */
@@ -866,6 +868,34 @@ class ApiClient {
     }
   };
 
+  // Admin pricing & commission methods (markup admin)
+  adminPricing = {
+    listPrices: async (status?: string) => {
+      const suffix = status ? `?status=${encodeURIComponent(status)}` : '';
+      return await this.makeRequest<PriceItem[]>(`/admin/prices${suffix}`);
+    },
+    approve: async (id: string, harga_jual: number) => {
+      return await this.makeRequest<PriceItem>(`/admin/prices/${id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ harga_jual }),
+      });
+    },
+    reject: async (id: string, admin_note: string) => {
+      return await this.makeRequest<PriceItem>(`/admin/prices/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ admin_note }),
+      });
+    },
+    commissions: async (params: { yayasan_id?: string; from?: string; to?: string } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.yayasan_id) qs.set('yayasan_id', params.yayasan_id);
+      if (params.from) qs.set('from', params.from);
+      if (params.to) qs.set('to', params.to);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<CommissionReport>(`/admin/commissions${suffix}`);
+    },
+  };
+
   // Admin users methods
   adminUsers = {
     list: async (params: { page?: number; page_size?: number } = {}) => {
@@ -1363,6 +1393,17 @@ class ApiClient {
     delete: async (id: string) => {
       return await this.makeRequest<void>(`/admin/trainings/${id}`, {
         method: 'DELETE',
+      });
+    },
+    approve: async (id: string) => {
+      return await this.makeRequest<TrainingDetail>(`/admin/trainings/${id}/approve`, {
+        method: 'POST',
+      });
+    },
+    reject: async (id: string, reason: string) => {
+      return await this.makeRequest<TrainingDetail>(`/admin/trainings/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
       });
     },
     registrations: async (trainingId: string) => {

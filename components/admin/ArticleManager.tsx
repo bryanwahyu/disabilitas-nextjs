@@ -79,7 +79,7 @@ const ArticleManager = () => {
 
     try {
       // Get content from contentEditable div and sanitize
-      const rawContent = editorRef.current?.innerHTML || formData.content;
+      const rawContent = editorRef.current?.innerHTML || formData.content || '';
       const content = DOMPurify.sanitize(rawContent, {
         ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'u', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'img', 'figure', 'figcaption', 'pre', 'code', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
         ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'class', 'id'],
@@ -139,7 +139,7 @@ const ArticleManager = () => {
         // Set content in editor after dialog opens
         setTimeout(() => {
           if (editorRef.current) {
-            editorRef.current.innerHTML = response.data.content || '';
+            editorRef.current.innerHTML = response.data?.content || '';
           }
         }, 100);
       }

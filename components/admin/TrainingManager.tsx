@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   GraduationCap, Search, Trash2, Eye, MapPin, Clock, Users,
-  ChevronDown, ChevronUp, Plus, Pencil, Upload, Download, FileText, X,
+  ChevronDown, ChevronUp, Plus, Pencil, Upload, Download, FileText, X, Check,
   Link as LinkIcon, CheckCircle, XCircle, Loader2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,8 @@ import { TrainingSummary, TrainingRegistration, TrainingMaterial } from '@/lib/a
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700 border-gray-300' },
+  pending: { label: 'Menunggu Review', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
+  rejected: { label: 'Ditolak', color: 'bg-red-100 text-red-700 border-red-300' },
   published: { label: 'Aktif', color: 'bg-green-100 text-green-700 border-green-300' },
   closed: { label: 'Ditutup', color: 'bg-orange-100 text-orange-700 border-orange-300' },
   completed: { label: 'Selesai', color: 'bg-blue-100 text-blue-700 border-blue-300' },
@@ -253,6 +255,34 @@ const TrainingManager = () => {
     }
   };
 
+  const handleApprove = async (t: TrainingSummary) => {
+    try {
+      const res = await apiClient.adminTrainings.approve(t.id);
+      if (res.error) throw new Error(res.error);
+      toast({ title: 'Disetujui', description: `"${t.title}" sekarang tayang` });
+      fetchTrainings();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Gagal menyetujui', variant: 'destructive' });
+    }
+  };
+
+  const handleReject = async (t: TrainingSummary) => {
+    const reason = window.prompt(`Alasan menolak "${t.title}":`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toast({ title: 'Error', description: 'Alasan penolakan wajib diisi', variant: 'destructive' });
+      return;
+    }
+    try {
+      const res = await apiClient.adminTrainings.reject(t.id, reason.trim());
+      if (res.error) throw new Error(res.error);
+      toast({ title: 'Ditolak', description: `"${t.title}" dikembalikan ke yayasan` });
+      fetchTrainings();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Gagal menolak', variant: 'destructive' });
+    }
+  };
+
   // REGISTRATIONS
   const toggleRegistrations = async (trainingId: string) => {
     if (regsOpen === trainingId) {
@@ -471,6 +501,16 @@ const TrainingManager = () => {
                       </div>
                     </div>
                     <div className="flex items-start gap-2 shrink-0">
+                      {t.status === 'pending' && (
+                        <>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleApprove(t)}>
+                            <Check className="h-3.5 w-3.5 mr-1" /> Setujui
+                          </Button>
+                          <Button size="sm" variant="outline" className="text-red-600" onClick={() => handleReject(t)}>
+                            <X className="h-3.5 w-3.5 mr-1" /> Tolak
+                          </Button>
+                        </>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => openEdit(t)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>

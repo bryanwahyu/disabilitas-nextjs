@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, CheckCircle, Phone, Globe, Mail, Loader2, Clock, ArrowRight, Wifi, Home, Building2, ShieldCheck } from 'lucide-react';
+import { MapPin, CheckCircle, Phone, Globe, Mail, Loader2, Clock, ArrowRight, Wifi, Home, Building2, ShieldCheck, Lock } from 'lucide-react';
+import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
 const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -31,6 +32,7 @@ interface TherapyLocation {
   website: string | null;
   is_verified: boolean;
   bpjs_accepted: boolean;
+  contact_locked?: boolean;
   consultation_methods: string | null;
   rate_min: number | null;
   rate_max: number | null;
@@ -88,7 +90,11 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
       qs.set('offset', String(currentOffset));
 
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-      const res = await fetch(`${baseUrl}/public/therapists?${qs.toString()}`);
+      const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+      const token = typeof window !== 'undefined' ? localStorage.getItem(tokenKey) : null;
+      const res = await fetch(`${baseUrl}/public/therapists?${qs.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const json = await res.json();
 
       const data = Array.isArray(json.data) ? json.data as TherapyLocation[] : [];
@@ -177,6 +183,27 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
           </CardHeader>
 
           <CardContent className="space-y-4">
+            {loc.contact_locked ? (
+              <>
+                <div className="flex items-start text-sm text-gray-600">
+                  <MapPin size={16} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" aria-hidden="true" />
+                  <span>{loc.city_name || 'Lokasi tersedia setelah daftar'}</span>
+                </div>
+                <Link href="/auth" className="flex items-center text-sm text-primary hover:underline">
+                  <Lock size={14} className="mr-2 flex-shrink-0" aria-hidden="true" />
+                  <span>Daftar gratis untuk lihat alamat &amp; kontak</span>
+                </Link>
+                {loc.website && (
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Globe size={14} className="mr-2 text-gray-400" aria-hidden="true" />
+                    <a href={loc.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                      {loc.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  </div>
+                )}
+              </>
+            ) : (
+            <>
             <div className="flex items-start text-sm text-gray-600">
               <MapPin size={16} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" aria-hidden="true" />
               <span>{loc.address}{loc.city_name ? `, ${loc.city_name}` : ''}</span>
@@ -261,6 +288,8 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
                 Lihat Detail
               </Button>
             </div>
+            </>
+            )}
           </CardContent>
         </Card>
       ))}

@@ -88,6 +88,7 @@ export type TherapyLocationSEO = Pick<
   | 'open_hours'
   | 'created_at'
   | 'updated_at'
+  | 'contact_locked'
 >;
 
 export type ForumThreadSEO = ForumThread & { comments?: ForumComment[] };

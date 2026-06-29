@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Build hemat memori. Satu app melayani 4 portal (lihat middleware.ts), jadi tiap
+  // worker static-generation me-load app penuh. Default Next spawn 1 worker/CPU (8 di
+  // mesin ini) -> mudah OOM di VM Docker yang kecil. Batasi worker & skalakan ke memori.
+  experimental: {
+    cpus: 2,
+    memoryBasedWorkersCount: true,
+  },
   typescript: {
     ignoreBuildErrors: false,
   },

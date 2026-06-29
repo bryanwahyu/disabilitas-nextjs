@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  MapPin, CheckCircle, Phone, Loader2,
+  MapPin, CheckCircle, Loader2,
   Clock, User, Briefcase, DollarSign, Calendar, Building2,
-  Stethoscope, Heart, MessageCircle, Video, Home
+  Stethoscope, Heart, MessageCircle, Video, Home, Lock
 } from 'lucide-react';
+import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
 interface TherapyProvider {
@@ -48,6 +49,7 @@ interface TherapyLocationPublic {
   rate_max?: number | null;
   services: string[];
   open_hours?: Array<{ day_of_week: number; open_time: string; close_time: string }>;
+  contact_locked?: boolean;
 }
 
 const PAGE_SIZE = 12;
@@ -108,7 +110,7 @@ export default function TerapisPage() {
   const [selectedMethod, setSelectedMethod] = useState('all');
   const [maxRate, setMaxRate] = useState('all');
   const [bpjsOnly, setBpjsOnly] = useState(false);
-  const [tab, setTab] = useState<TabMode>('locations');
+  const [tab, setTab] = useState<TabMode>('therapists');
   const [therapists, setTherapists] = useState<TherapyProvider[]>([]);
   const [locations, setLocations] = useState<TherapyLocationPublic[]>([]);
   const [total, setTotal] = useState(0);
@@ -160,7 +162,11 @@ export default function TerapisPage() {
       qs.set('limit', String(PAGE_SIZE));
       qs.set('offset', String(currentOffset));
 
-      const res = await fetch(`${baseUrl}/public/therapists?${qs.toString()}`);
+      const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+      const token = typeof window !== 'undefined' ? localStorage.getItem(tokenKey) : null;
+      const res = await fetch(`${baseUrl}/public/therapists?${qs.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const json = await res.json();
       const data = Array.isArray(json.data) ? json.data as TherapyLocationPublic[] : [];
       const metaTotal = json.meta?.total ?? 0;
@@ -545,16 +551,28 @@ function LocationCard({ location: loc, router }: { location: TherapyLocationPubl
         </div>
       </CardHeader>
       <CardContent className="space-y-2.5">
-        <div className="flex items-start text-sm text-gray-600">
-          <MapPin size={14} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" />
-          <span className="line-clamp-2">{loc.address}{loc.city_name ? `, ${loc.city_name}` : ''}</span>
-        </div>
-
-        {loc.phone && (
-          <div className="flex items-center text-sm text-gray-600">
-            <Phone size={14} className="mr-2 text-gray-400" />
-            <span>{loc.phone}</span>
-          </div>
+        {loc.contact_locked ? (
+          <>
+            <div className="flex items-start text-sm text-gray-600">
+              <MapPin size={14} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" />
+              <span className="line-clamp-2">{loc.city_name || 'Lokasi tersedia setelah daftar'}</span>
+            </div>
+            <Link
+              href="/auth"
+              className="flex items-center text-sm text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Lock size={14} className="mr-2 flex-shrink-0" />
+              <span>Daftar gratis untuk lihat alamat &amp; kontak</span>
+            </Link>
+          </>
+        ) : (
+          <>
+            <div className="flex items-start text-sm text-gray-600">
+              <MapPin size={14} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" />
+              <span className="line-clamp-2">{loc.address}{loc.city_name ? `, ${loc.city_name}` : ''}</span>
+            </div>
+          </>
         )}
 
         {formatRateRange(loc.rate_min, loc.rate_max) && (
