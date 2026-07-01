@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import AdminSetup from '@/components/AdminSetup';
 import { User, Users, Stethoscope, UserCheck } from 'lucide-react';
 import { validatePassword } from '@/lib/validation';
+import { portalDestinationForRole } from '@/lib/portal';
 import type { RegisterCredentials, UserRole } from '@/lib/api/types';
 
 const ROLE_OPTIONS = [
@@ -61,9 +62,12 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (!authLoading && currentUser) {
-      if (currentUser.role === 'admin') {
-        router.replace('/admin');
-      } else if (currentUser.role === 'therapy' || currentUser.role === 'therapist_independent' || currentUser.role === 'instructor' || currentUser.role === 'employer') {
+      // Role pemilik portal (yayasan/terapis/admin) dilempar ke subdomain-nya.
+      // Sesi terisolasi per-origin, jadi user login ulang di portal tujuan.
+      const portal = portalDestinationForRole(currentUser.role);
+      if (portal) {
+        window.location.href = portal;
+      } else if (currentUser.role === 'instructor' || currentUser.role === 'employer') {
         router.replace('/dashboard');
       } else {
         router.replace('/beranda');

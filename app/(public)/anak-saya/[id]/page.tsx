@@ -27,12 +27,26 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Baby, Flag, Plus, ClipboardList, Star, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Baby, Flag, Plus, ClipboardList, Star, TrendingUp, Stethoscope, MessageCircle } from 'lucide-react';
 
 function formatDate(d: string): string {
   const date = new Date(d);
   if (isNaN(date.getTime())) return d;
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Waktu relatif gaya X: "baru saja", "3j", "2h", lalu tanggal.
+function relTime(s: string): string {
+  const date = new Date(s);
+  if (isNaN(date.getTime())) return '';
+  const m = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (m < 1) return 'baru saja';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}j`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}h`;
+  return formatDate(s);
 }
 
 function formatMonth(m: string): string {
@@ -313,26 +327,33 @@ export default function PerkembanganAnakPage() {
                   Belum ada catatan sesi dari terapis
                 </p>
               ) : (
-                <div className="space-y-4">
-                  {notes.map((n) => (
-                    <div key={n.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between gap-4 mb-2">
-                        <p className="text-sm font-medium text-gray-900">
-                          {formatDate(n.session_date)}
-                        </p>
-                        <RatingStars value={n.progress_rating} />
+                <div>
+                  {notes.map((n, idx) => (
+                    <div key={n.id} className="relative flex gap-3 pb-5 last:pb-0">
+                      {idx < notes.length - 1 && (
+                        <span className="absolute left-[18px] top-10 -bottom-0 w-px bg-gray-200" aria-hidden="true" />
+                      )}
+                      <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center flex-shrink-0 ring-4 ring-white z-10">
+                        <Stethoscope className="h-4 w-4" />
                       </div>
-                      <p className="text-sm text-gray-700">
-                        <span className="font-medium">Aktivitas:</span> {n.activity}
-                      </p>
-                      {n.observation && (
-                        <p className="text-sm text-gray-700 mt-1">
-                          <span className="font-medium">Observasi:</span> {n.observation}
-                        </p>
-                      )}
-                      {n.notes && (
-                        <p className="text-sm text-gray-600 mt-1">{n.notes}</p>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 text-sm flex-wrap">
+                          <span className="font-semibold text-gray-900">Terapis</span>
+                          <span className="text-gray-400">· sesi {formatDate(n.session_date)}</span>
+                          <span className="text-gray-400">· {relTime(n.created_at)}</span>
+                          <span className="ml-auto"><RatingStars value={n.progress_rating} /></span>
+                        </div>
+                        <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap break-words">{n.activity}</p>
+                        {n.observation && (
+                          <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-wrap break-words">{n.observation}</p>
+                        )}
+                        {n.notes && (
+                          <div className="mt-2 flex items-start gap-2 bg-teal-50 border border-teal-100 rounded-xl px-3 py-2">
+                            <MessageCircle className="h-3.5 w-3.5 text-teal-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{n.notes}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

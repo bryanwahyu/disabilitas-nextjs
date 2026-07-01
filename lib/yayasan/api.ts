@@ -172,6 +172,11 @@ export interface ScheduleSlot {
   is_active: boolean;
 }
 
+export interface ScheduleSaveInput {
+  slot_duration_minutes?: number;
+  slots: { day_of_week: number; start_time: string; end_time: string }[];
+}
+
 export interface ScheduleDetail {
   schedule: {
     id: string;
@@ -248,6 +253,16 @@ export const api = {
 
   // Schedule
   getSchedule: () => get<ScheduleDetail>('/schedule'),
+
+  // Jadwal terapis milik yayasan (yayasan yang mengatur).
+  getTherapistSchedule: (tid: string) =>
+    get<ScheduleDetail>(`/yayasan/therapists/${tid}/schedule`),
+  createTherapistSchedule: (tid: string, body: ScheduleSaveInput) =>
+    post<ScheduleDetail>(`/yayasan/therapists/${tid}/schedule`, body),
+  updateTherapistSchedule: (tid: string, body: ScheduleSaveInput) =>
+    put<ScheduleDetail>(`/yayasan/therapists/${tid}/schedule`, body),
+  deleteTherapistSchedule: (tid: string) =>
+    del<{ deleted: boolean }>(`/yayasan/therapists/${tid}/schedule`),
 
   // Password reset
   requestPasswordReset: (email: string) =>
