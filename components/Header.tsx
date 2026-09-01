@@ -1,7 +1,7 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, X, Shield, LogOut, User, Calendar, LayoutDashboard, ChevronDown } from 'lucide-react';
+import { Menu, X, Shield, LogOut, User, Calendar, LayoutDashboard, ChevronDown, Target } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,6 +12,16 @@ const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTherapist, setIsTherapist] = useState(false);
+  /*
+   * Dropdown nav dibuka dengan TAP, bukan hover.
+   *
+   * Sebelumnya satu-satunya jalan membuka submenu adalah `group-hover` — di
+   * layar sentuh tak ada hover, jadi "Layanan" dan "Belajar" praktis tidak bisa
+   * dibuka sama sekali. Hover tetap dipertahankan untuk tetikus, tapi hanya
+   * sebagai tambahan di atas state eksplisit ini.
+   */
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement>(null);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -59,6 +69,29 @@ const Header = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Submenu yang terbuka ditutup oleh Escape dan oleh ketukan di luar nav.
+  // Tanpa keduanya, submenu yang dibuka dengan tap tak punya jalan keluar
+  // selain memilih salah satu isinya.
+  useEffect(() => {
+    if (!openDropdown) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenDropdown(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openDropdown]);
+
   return (
     <header className={`sticky top-0 z-50 transition-all duration-300 ${
       isScrolled ? 'bg-white shadow-md' : 'bg-white/95 backdrop-blur-sm'
@@ -83,25 +116,46 @@ const Header = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-1" role="navigation" aria-label="Main navigation">
+          <nav ref={navRef} className="hidden md:flex items-center space-x-1" role="navigation" aria-label="Main navigation">
             {navigation.map((item) => (
               item.children ? (
-                <div key={item.name} className="relative group">
+                <div
+                  key={item.name}
+                  className="relative"
+                  // Hover hanya untuk tetikus. Sebagian browser sentuh mengirim
+                  // pointerenter palsu setelah tap, yang akan langsung membuka
+                  // ulang menu yang baru saja ditutup.
+                  onPointerEnter={(e) => { if (e.pointerType === 'mouse') setOpenDropdown(item.name); }}
+                  onPointerLeave={(e) => { if (e.pointerType === 'mouse') setOpenDropdown(null); }}
+                >
                   <button
-                    className="flex items-center gap-1 text-gray-600 group-hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md group-hover:bg-primary/5"
+                    type="button"
+                    className="flex min-h-11 items-center gap-1 text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5 aria-expanded:text-primary aria-expanded:bg-primary/5"
                     aria-haspopup="true"
+                    aria-expanded={openDropdown === item.name}
+                    aria-controls={`nav-submenu-${item.name}`}
+                    onClick={() => setOpenDropdown(openDropdown === item.name ? null : item.name)}
                   >
                     {item.name}
-                    <ChevronDown size={14} className="transition-transform group-hover:rotate-180" />
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${openDropdown === item.name ? 'rotate-180' : ''}`}
+                    />
                   </button>
-                  {/* Dropdown: tampil saat hover/fokus. pt-1 menjaga jembatan hover. */}
-                  <div className="absolute left-0 top-full z-50 hidden min-w-[200px] pt-1 group-hover:block group-focus-within:block">
+                  {/* pt-1 menjaga jembatan hover antara tombol dan panel. */}
+                  <div
+                    id={`nav-submenu-${item.name}`}
+                    className={`absolute left-0 top-full z-50 min-w-[200px] pt-1 ${
+                      openDropdown === item.name ? 'block' : 'hidden'
+                    }`}
+                  >
                     <div className="rounded-lg border bg-white py-1.5 shadow-lg">
                       {item.children.map((child) => (
                         <Link
                           key={child.name}
                           to={child.href}
-                          className="block px-4 py-2 text-sm text-gray-600 hover:bg-primary/5 hover:text-primary transition-colors"
+                          onClick={() => setOpenDropdown(null)}
+                          className="flex min-h-11 items-center px-4 py-2 text-sm text-gray-600 hover:bg-primary/5 hover:text-primary transition-colors"
                         >
                           {child.name}
                         </Link>
@@ -125,6 +179,14 @@ const Header = () => {
                 className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
               >
                 Jadwal
+              </Link>
+            )}
+            {user && !isTherapist && (
+              <Link
+                to="/program"
+                className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
+              >
+                Program
               </Link>
             )}
             {user?.role === 'orang_tua' && (
@@ -246,6 +308,16 @@ const Header = () => {
                 >
                   <Calendar size={16} className="inline mr-2" />
                   Jadwal Saya
+                </Link>
+              )}
+              {user && !isTherapist && (
+                <Link
+                  to="/program"
+                  className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Target size={16} className="inline mr-2" />
+                  Program Terapi
                 </Link>
               )}
               {user?.role === 'orang_tua' && (

@@ -607,6 +607,28 @@ function TherapistDetailPage() {
         {/* Tab Content: Jadwal */}
         {activeTab === 'jadwal' && (
           <div className="space-y-6">
+            {/*
+              Dua cara memesan, dipisah dengan jelas: satu sesi untuk mencoba,
+              atau paket berjalan untuk kebutuhan yang butuh pertemuan rutin.
+              Tanpa pintu masuk ini, program hanya bisa ditemukan lewat URL.
+            */}
+            <Card className="border-teal-200 bg-teal-50/60">
+              <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Butuh terapi rutin, bukan sekali datang?</h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Ambil paket terapi berjalan: bayar sekali, jadwalnya tetap tiap minggu, dan progres anak
+                    dicatat per sesi.
+                  </p>
+                </div>
+                <Button asChild className="shrink-0">
+                  <Link to="/program/ambil" search={{ terapis: therapistId }}>
+                    Ambil program terapi
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
             {schedulePending || slotsPending ? (
               <div className="flex items-center justify-center py-10 text-gray-500 text-sm">
                 <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-3" />

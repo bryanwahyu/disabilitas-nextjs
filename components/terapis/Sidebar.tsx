@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import {
   LayoutDashboard, MessageSquare, Calendar, CalendarCheck, User,
-  BookOpen, Star, Users, Link2, Settings, LogOut, Stethoscope, NotebookPen,
+  BookOpen, Star, Users, Link2, Settings, LogOut, Stethoscope, NotebookPen, Target,
 } from 'lucide-react';
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { href: '/portal-terapis/dashboard/konsultasi', label: 'Konsultasi', icon: MessageSquare },
   { href: '/portal-terapis/dashboard/appointments', label: 'Janji Temu', icon: CalendarCheck },
   { href: '/portal-terapis/dashboard/jadwal', label: 'Jadwal', icon: Calendar },
+  { href: '/portal-terapis/dashboard/program', label: 'Program Terapi', icon: Target },
   { href: '/portal-terapis/dashboard/jurnal', label: 'Jurnal Sesi', icon: NotebookPen },
   { href: '/portal-terapis/dashboard/profil', label: 'Profil Terapis', icon: User },
   { href: '/portal-terapis/dashboard/pelatihan', label: 'Pelatihan Saya', icon: BookOpen },

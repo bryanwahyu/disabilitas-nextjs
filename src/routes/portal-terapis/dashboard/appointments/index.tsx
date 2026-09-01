@@ -13,12 +13,13 @@ export const Route = createFileRoute('/portal-terapis/dashboard/appointments/')(
 
 const metadata = { title: 'Janji Temu' };
 
-type Tab = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'all';
+type Tab = 'pending' | 'confirmed' | 'completed' | 'no_show' | 'cancelled' | 'all';
 
 const TABS: Array<{ value: Tab; label: string }> = [
   { value: 'pending', label: 'Menunggu' },
   { value: 'confirmed', label: 'Dikonfirmasi' },
   { value: 'completed', label: 'Selesai' },
+  { value: 'no_show', label: 'Tidak hadir' },
   { value: 'cancelled', label: 'Dibatalkan' },
   { value: 'all', label: 'Semua' },
 ];
@@ -27,6 +28,7 @@ const STATUS: Record<string, { label: string; className: string }> = {
   pending: { label: 'Menunggu', className: 'bg-amber-500/10 border-amber-500/30 text-amber-300' },
   confirmed: { label: 'Dikonfirmasi', className: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' },
   completed: { label: 'Selesai', className: 'bg-sky-500/10 border-sky-500/30 text-sky-300' },
+  no_show: { label: 'Tidak hadir', className: 'bg-amber-500/10 border-amber-500/30 text-amber-300' },
   cancelled: { label: 'Dibatalkan', className: 'bg-rose-500/10 border-rose-500/30 text-rose-300' },
 };
 
@@ -67,9 +69,13 @@ function AppointmentsPage() {
   });
 
   const { mutate: setStatus, isPending: updating } = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'confirmed' | 'cancelled' | 'completed' }) =>
+    mutationFn: ({ id, status }: { id: string; status: 'confirmed' | 'cancelled' | 'completed' | 'no_show' }) =>
       api.setAppointmentStatus(id, status),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.terapis.appointments.all() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.terapis.appointments.all() });
+      // Kehadiran mengubah sisa kuota program, jadi daftar program ikut basi.
+      qc.invalidateQueries({ queryKey: qk.programs.all() });
+    },
   });
 
   const counts = appointments.reduce<Record<string, number>>((acc, a) => {
@@ -182,14 +188,29 @@ function AppointmentsPage() {
                     </>
                   )}
                   {appt.status === 'confirmed' && isPast && (
-                    <button
-                      type="button"
-                      disabled={updating}
-                      onClick={() => setStatus({ id: appt.id, status: 'completed' })}
-                      className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-300 hover:bg-sky-500/20 disabled:opacity-50"
-                    >
-                      Tandai selesai
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        disabled={updating}
+                        onClick={() => setStatus({ id: appt.id, status: 'completed' })}
+                        className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-300 hover:bg-sky-500/20 disabled:opacity-50"
+                      >
+                        Tandai selesai
+                      </button>
+                      {/*
+                        Ketidakhadiran perlu tombolnya sendiri: tanpa itu satu-satunya
+                        cara menutup sesi yang tidak dihadiri adalah "batal", dan sesi
+                        itu jadi tidak terhitung memakai kuota paket terapi.
+                      */}
+                      <button
+                        type="button"
+                        disabled={updating}
+                        onClick={() => setStatus({ id: appt.id, status: 'no_show' })}
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                      >
+                        Tidak datang
+                      </button>
+                    </>
                   )}
                 </div>
               </li>

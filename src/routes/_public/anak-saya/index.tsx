@@ -196,7 +196,7 @@ function AnakSayaPage() {
           {children.length === 0 ? (
             <Card className="max-w-md mx-auto">
               <CardContent className="py-12 text-center">
-                <Baby className="h-12 w-12 text-gray-500 mx-auto mb-4" />
+                <Baby className="h-12 w-12 text-gray-600 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
                   Belum Ada Profil Anak
                 </h3>
@@ -220,8 +220,12 @@ function AnakSayaPage() {
                       </div>
                       <div className="flex-1">
                         <CardTitle className="text-lg">{child.full_name}</CardTitle>
+                        {/* gray-600, bukan gray-500: usia anak dibaca sekilas di
+                            ruang tunggu klinik, sering oleh mata yang lelah.
+                            gray-500 pada putih memang lolos AA (4,8:1), tapi
+                            gray-600 (7,6:1) lolos AAA tanpa biaya apa pun. */}
                         {ageLabel(child.date_of_birth) && (
-                          <p className="text-sm text-gray-500 mt-1">
+                          <p className="text-sm text-gray-600 mt-1">
                             {ageLabel(child.date_of_birth)}
                           </p>
                         )}

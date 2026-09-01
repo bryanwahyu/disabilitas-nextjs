@@ -59,6 +59,7 @@ import { Route as PublicKonsultasiIndexRouteImport } from './routes/_public/kons
 import { Route as PublicLayananIndexRouteImport } from './routes/_public/layanan/index'
 import { Route as PublicPelatihanIndexRouteImport } from './routes/_public/pelatihan/index'
 import { Route as PublicProfilIndexRouteImport } from './routes/_public/profil/index'
+import { Route as PublicProgramIndexRouteImport } from './routes/_public/program/index'
 import { Route as PublicRekomendasiIndexRouteImport } from './routes/_public/rekomendasi/index'
 import { Route as PublicSkriningDenverIndexRouteImport } from './routes/_public/skrining-denver/index'
 import { Route as PublicSyaratKetentuanIndexRouteImport } from './routes/_public/syarat-ketentuan/index'
@@ -81,6 +82,8 @@ import { Route as PublicKonsultasiMulaiIndexRouteImport } from './routes/_public
 import { Route as PublicKonsultasiRiwayatIndexRouteImport } from './routes/_public/konsultasi/riwayat/index'
 import { Route as PublicLayananServiceIdIndexRouteImport } from './routes/_public/layanan/$serviceId/index'
 import { Route as PublicPelatihanIdIndexRouteImport } from './routes/_public/pelatihan/$id/index'
+import { Route as PublicProgramIdIndexRouteImport } from './routes/_public/program/$id/index'
+import { Route as PublicProgramAmbilIndexRouteImport } from './routes/_public/program/ambil/index'
 import { Route as PublicTerapisIdIndexRouteImport } from './routes/_public/terapis/$id/index'
 import { Route as AdminDashboardAcaraIndexRouteImport } from './routes/admin/dashboard/acara/index'
 import { Route as AdminDashboardAppointmentsIndexRouteImport } from './routes/admin/dashboard/appointments/index'
@@ -106,6 +109,8 @@ import { Route as PortalTerapisDashboardKonsultasiIndexRouteImport } from './rou
 import { Route as PortalTerapisDashboardPelatihanIndexRouteImport } from './routes/portal-terapis/dashboard/pelatihan/index'
 import { Route as PortalTerapisDashboardPengaturanIndexRouteImport } from './routes/portal-terapis/dashboard/pengaturan/index'
 import { Route as PortalTerapisDashboardProfilIndexRouteImport } from './routes/portal-terapis/dashboard/profil/index'
+import { Route as PortalTerapisDashboardProgramIndexRouteImport } from './routes/portal-terapis/dashboard/program/index'
+import { Route as PortalTerapisDashboardProgramIdRouteImport } from './routes/portal-terapis/dashboard/program/$id'
 import { Route as PortalTerapisDashboardUlasanIndexRouteImport } from './routes/portal-terapis/dashboard/ulasan/index'
 import { Route as PortalYayasanDashboardAcaraIndexRouteImport } from './routes/portal-yayasan/dashboard/acara/index'
 import { Route as PortalYayasanDashboardAppointmentIndexRouteImport } from './routes/portal-yayasan/dashboard/appointment/index'
@@ -118,6 +123,7 @@ import { Route as PortalYayasanDashboardProfilIndexRouteImport } from './routes/
 import { Route as PortalYayasanDashboardTerapisIndexRouteImport } from './routes/portal-yayasan/dashboard/terapis/index'
 import { Route as PortalYayasanDashboardUlasanIndexRouteImport } from './routes/portal-yayasan/dashboard/ulasan/index'
 import { Route as PublicKonsultasiBayarIdIndexRouteImport } from './routes/_public/konsultasi/bayar/$id/index'
+import { Route as PublicProgramBayarIdIndexRouteImport } from './routes/_public/program/bayar/$id/index'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
   id: '/_public',
@@ -373,6 +379,11 @@ const PublicProfilIndexRoute = PublicProfilIndexRouteImport.update({
   path: '/profil/',
   getParentRoute: () => PublicRouteRoute,
 } as any)
+const PublicProgramIndexRoute = PublicProgramIndexRouteImport.update({
+  id: '/program/',
+  path: '/program/',
+  getParentRoute: () => PublicRouteRoute,
+} as any)
 const PublicRekomendasiIndexRoute = PublicRekomendasiIndexRouteImport.update({
   id: '/rekomendasi/',
   path: '/rekomendasi/',
@@ -491,6 +502,16 @@ const PublicPelatihanIdIndexRoute = PublicPelatihanIdIndexRouteImport.update({
   id: '/$id/',
   path: '/$id/',
   getParentRoute: () => PublicPelatihanRouteRoute,
+} as any)
+const PublicProgramIdIndexRoute = PublicProgramIdIndexRouteImport.update({
+  id: '/program/$id/',
+  path: '/program/$id/',
+  getParentRoute: () => PublicRouteRoute,
+} as any)
+const PublicProgramAmbilIndexRoute = PublicProgramAmbilIndexRouteImport.update({
+  id: '/program/ambil/',
+  path: '/program/ambil/',
+  getParentRoute: () => PublicRouteRoute,
 } as any)
 const PublicTerapisIdIndexRoute = PublicTerapisIdIndexRouteImport.update({
   id: '/$id/',
@@ -641,6 +662,18 @@ const PortalTerapisDashboardProfilIndexRoute =
     path: '/profil/',
     getParentRoute: () => PortalTerapisDashboardRouteRoute,
   } as any)
+const PortalTerapisDashboardProgramIndexRoute =
+  PortalTerapisDashboardProgramIndexRouteImport.update({
+    id: '/program/',
+    path: '/program/',
+    getParentRoute: () => PortalTerapisDashboardRouteRoute,
+  } as any)
+const PortalTerapisDashboardProgramIdRoute =
+  PortalTerapisDashboardProgramIdRouteImport.update({
+    id: '/program/$id',
+    path: '/program/$id',
+    getParentRoute: () => PortalTerapisDashboardRouteRoute,
+  } as any)
 const PortalTerapisDashboardUlasanIndexRoute =
   PortalTerapisDashboardUlasanIndexRouteImport.update({
     id: '/ulasan/',
@@ -713,6 +746,12 @@ const PublicKonsultasiBayarIdIndexRoute =
     path: '/konsultasi/bayar/$id/',
     getParentRoute: () => PublicRouteRoute,
   } as any)
+const PublicProgramBayarIdIndexRoute =
+  PublicProgramBayarIdIndexRouteImport.update({
+    id: '/program/bayar/$id/',
+    path: '/program/bayar/$id/',
+    getParentRoute: () => PublicRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
@@ -764,6 +803,7 @@ export interface FileRoutesByFullPath {
   '/layanan/': typeof PublicLayananIndexRoute
   '/pelatihan/': typeof PublicPelatihanIndexRoute
   '/profil/': typeof PublicProfilIndexRoute
+  '/program/': typeof PublicProgramIndexRoute
   '/rekomendasi/': typeof PublicRekomendasiIndexRoute
   '/skrining-denver/': typeof PublicSkriningDenverIndexRoute
   '/syarat-ketentuan/': typeof PublicSyaratKetentuanIndexRoute
@@ -776,6 +816,7 @@ export interface FileRoutesByFullPath {
   '/portal-terapis/dashboard/': typeof PortalTerapisDashboardIndexRoute
   '/portal-yayasan/auth/': typeof PortalYayasanAuthIndexRoute
   '/portal-yayasan/dashboard/': typeof PortalYayasanDashboardIndexRoute
+  '/portal-terapis/dashboard/program/$id': typeof PortalTerapisDashboardProgramIdRoute
   '/acara/$id/': typeof PublicAcaraIdIndexRoute
   '/anak-saya/$id/': typeof PublicAnakSayaIdIndexRoute
   '/artikel/$slug/': typeof PublicArtikelSlugIndexRoute
@@ -786,6 +827,8 @@ export interface FileRoutesByFullPath {
   '/konsultasi/riwayat/': typeof PublicKonsultasiRiwayatIndexRoute
   '/layanan/$serviceId/': typeof PublicLayananServiceIdIndexRoute
   '/pelatihan/$id/': typeof PublicPelatihanIdIndexRoute
+  '/program/$id/': typeof PublicProgramIdIndexRoute
+  '/program/ambil/': typeof PublicProgramAmbilIndexRoute
   '/terapis/$id/': typeof PublicTerapisIdIndexRoute
   '/admin/dashboard/acara/': typeof AdminDashboardAcaraIndexRoute
   '/admin/dashboard/appointments/': typeof AdminDashboardAppointmentsIndexRoute
@@ -811,6 +854,7 @@ export interface FileRoutesByFullPath {
   '/portal-terapis/dashboard/pelatihan/': typeof PortalTerapisDashboardPelatihanIndexRoute
   '/portal-terapis/dashboard/pengaturan/': typeof PortalTerapisDashboardPengaturanIndexRoute
   '/portal-terapis/dashboard/profil/': typeof PortalTerapisDashboardProfilIndexRoute
+  '/portal-terapis/dashboard/program/': typeof PortalTerapisDashboardProgramIndexRoute
   '/portal-terapis/dashboard/ulasan/': typeof PortalTerapisDashboardUlasanIndexRoute
   '/portal-yayasan/dashboard/acara/': typeof PortalYayasanDashboardAcaraIndexRoute
   '/portal-yayasan/dashboard/appointment/': typeof PortalYayasanDashboardAppointmentIndexRoute
@@ -823,6 +867,7 @@ export interface FileRoutesByFullPath {
   '/portal-yayasan/dashboard/terapis/': typeof PortalYayasanDashboardTerapisIndexRoute
   '/portal-yayasan/dashboard/ulasan/': typeof PortalYayasanDashboardUlasanIndexRoute
   '/konsultasi/bayar/$id/': typeof PublicKonsultasiBayarIdIndexRoute
+  '/program/bayar/$id/': typeof PublicProgramBayarIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -853,6 +898,7 @@ export interface FileRoutesByTo {
   '/layanan': typeof PublicLayananIndexRoute
   '/pelatihan': typeof PublicPelatihanIndexRoute
   '/profil': typeof PublicProfilIndexRoute
+  '/program': typeof PublicProgramIndexRoute
   '/rekomendasi': typeof PublicRekomendasiIndexRoute
   '/skrining-denver': typeof PublicSkriningDenverIndexRoute
   '/syarat-ketentuan': typeof PublicSyaratKetentuanIndexRoute
@@ -865,6 +911,7 @@ export interface FileRoutesByTo {
   '/portal-terapis/dashboard': typeof PortalTerapisDashboardIndexRoute
   '/portal-yayasan/auth': typeof PortalYayasanAuthIndexRoute
   '/portal-yayasan/dashboard': typeof PortalYayasanDashboardIndexRoute
+  '/portal-terapis/dashboard/program/$id': typeof PortalTerapisDashboardProgramIdRoute
   '/acara/$id': typeof PublicAcaraIdIndexRoute
   '/anak-saya/$id': typeof PublicAnakSayaIdIndexRoute
   '/artikel/$slug': typeof PublicArtikelSlugIndexRoute
@@ -875,6 +922,8 @@ export interface FileRoutesByTo {
   '/konsultasi/riwayat': typeof PublicKonsultasiRiwayatIndexRoute
   '/layanan/$serviceId': typeof PublicLayananServiceIdIndexRoute
   '/pelatihan/$id': typeof PublicPelatihanIdIndexRoute
+  '/program/$id': typeof PublicProgramIdIndexRoute
+  '/program/ambil': typeof PublicProgramAmbilIndexRoute
   '/terapis/$id': typeof PublicTerapisIdIndexRoute
   '/admin/dashboard/acara': typeof AdminDashboardAcaraIndexRoute
   '/admin/dashboard/appointments': typeof AdminDashboardAppointmentsIndexRoute
@@ -900,6 +949,7 @@ export interface FileRoutesByTo {
   '/portal-terapis/dashboard/pelatihan': typeof PortalTerapisDashboardPelatihanIndexRoute
   '/portal-terapis/dashboard/pengaturan': typeof PortalTerapisDashboardPengaturanIndexRoute
   '/portal-terapis/dashboard/profil': typeof PortalTerapisDashboardProfilIndexRoute
+  '/portal-terapis/dashboard/program': typeof PortalTerapisDashboardProgramIndexRoute
   '/portal-terapis/dashboard/ulasan': typeof PortalTerapisDashboardUlasanIndexRoute
   '/portal-yayasan/dashboard/acara': typeof PortalYayasanDashboardAcaraIndexRoute
   '/portal-yayasan/dashboard/appointment': typeof PortalYayasanDashboardAppointmentIndexRoute
@@ -912,6 +962,7 @@ export interface FileRoutesByTo {
   '/portal-yayasan/dashboard/terapis': typeof PortalYayasanDashboardTerapisIndexRoute
   '/portal-yayasan/dashboard/ulasan': typeof PortalYayasanDashboardUlasanIndexRoute
   '/konsultasi/bayar/$id': typeof PublicKonsultasiBayarIdIndexRoute
+  '/program/bayar/$id': typeof PublicProgramBayarIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -965,6 +1016,7 @@ export interface FileRoutesById {
   '/_public/layanan/': typeof PublicLayananIndexRoute
   '/_public/pelatihan/': typeof PublicPelatihanIndexRoute
   '/_public/profil/': typeof PublicProfilIndexRoute
+  '/_public/program/': typeof PublicProgramIndexRoute
   '/_public/rekomendasi/': typeof PublicRekomendasiIndexRoute
   '/_public/skrining-denver/': typeof PublicSkriningDenverIndexRoute
   '/_public/syarat-ketentuan/': typeof PublicSyaratKetentuanIndexRoute
@@ -977,6 +1029,7 @@ export interface FileRoutesById {
   '/portal-terapis/dashboard/': typeof PortalTerapisDashboardIndexRoute
   '/portal-yayasan/auth/': typeof PortalYayasanAuthIndexRoute
   '/portal-yayasan/dashboard/': typeof PortalYayasanDashboardIndexRoute
+  '/portal-terapis/dashboard/program/$id': typeof PortalTerapisDashboardProgramIdRoute
   '/_public/acara/$id/': typeof PublicAcaraIdIndexRoute
   '/_public/anak-saya/$id/': typeof PublicAnakSayaIdIndexRoute
   '/_public/artikel/$slug/': typeof PublicArtikelSlugIndexRoute
@@ -987,6 +1040,8 @@ export interface FileRoutesById {
   '/_public/konsultasi/riwayat/': typeof PublicKonsultasiRiwayatIndexRoute
   '/_public/layanan/$serviceId/': typeof PublicLayananServiceIdIndexRoute
   '/_public/pelatihan/$id/': typeof PublicPelatihanIdIndexRoute
+  '/_public/program/$id/': typeof PublicProgramIdIndexRoute
+  '/_public/program/ambil/': typeof PublicProgramAmbilIndexRoute
   '/_public/terapis/$id/': typeof PublicTerapisIdIndexRoute
   '/admin/dashboard/acara/': typeof AdminDashboardAcaraIndexRoute
   '/admin/dashboard/appointments/': typeof AdminDashboardAppointmentsIndexRoute
@@ -1012,6 +1067,7 @@ export interface FileRoutesById {
   '/portal-terapis/dashboard/pelatihan/': typeof PortalTerapisDashboardPelatihanIndexRoute
   '/portal-terapis/dashboard/pengaturan/': typeof PortalTerapisDashboardPengaturanIndexRoute
   '/portal-terapis/dashboard/profil/': typeof PortalTerapisDashboardProfilIndexRoute
+  '/portal-terapis/dashboard/program/': typeof PortalTerapisDashboardProgramIndexRoute
   '/portal-terapis/dashboard/ulasan/': typeof PortalTerapisDashboardUlasanIndexRoute
   '/portal-yayasan/dashboard/acara/': typeof PortalYayasanDashboardAcaraIndexRoute
   '/portal-yayasan/dashboard/appointment/': typeof PortalYayasanDashboardAppointmentIndexRoute
@@ -1024,6 +1080,7 @@ export interface FileRoutesById {
   '/portal-yayasan/dashboard/terapis/': typeof PortalYayasanDashboardTerapisIndexRoute
   '/portal-yayasan/dashboard/ulasan/': typeof PortalYayasanDashboardUlasanIndexRoute
   '/_public/konsultasi/bayar/$id/': typeof PublicKonsultasiBayarIdIndexRoute
+  '/_public/program/bayar/$id/': typeof PublicProgramBayarIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1077,6 +1134,7 @@ export interface FileRouteTypes {
     | '/layanan/'
     | '/pelatihan/'
     | '/profil/'
+    | '/program/'
     | '/rekomendasi/'
     | '/skrining-denver/'
     | '/syarat-ketentuan/'
@@ -1089,6 +1147,7 @@ export interface FileRouteTypes {
     | '/portal-terapis/dashboard/'
     | '/portal-yayasan/auth/'
     | '/portal-yayasan/dashboard/'
+    | '/portal-terapis/dashboard/program/$id'
     | '/acara/$id/'
     | '/anak-saya/$id/'
     | '/artikel/$slug/'
@@ -1099,6 +1158,8 @@ export interface FileRouteTypes {
     | '/konsultasi/riwayat/'
     | '/layanan/$serviceId/'
     | '/pelatihan/$id/'
+    | '/program/$id/'
+    | '/program/ambil/'
     | '/terapis/$id/'
     | '/admin/dashboard/acara/'
     | '/admin/dashboard/appointments/'
@@ -1124,6 +1185,7 @@ export interface FileRouteTypes {
     | '/portal-terapis/dashboard/pelatihan/'
     | '/portal-terapis/dashboard/pengaturan/'
     | '/portal-terapis/dashboard/profil/'
+    | '/portal-terapis/dashboard/program/'
     | '/portal-terapis/dashboard/ulasan/'
     | '/portal-yayasan/dashboard/acara/'
     | '/portal-yayasan/dashboard/appointment/'
@@ -1136,6 +1198,7 @@ export interface FileRouteTypes {
     | '/portal-yayasan/dashboard/terapis/'
     | '/portal-yayasan/dashboard/ulasan/'
     | '/konsultasi/bayar/$id/'
+    | '/program/bayar/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/sitemap.xml'
@@ -1166,6 +1229,7 @@ export interface FileRouteTypes {
     | '/layanan'
     | '/pelatihan'
     | '/profil'
+    | '/program'
     | '/rekomendasi'
     | '/skrining-denver'
     | '/syarat-ketentuan'
@@ -1178,6 +1242,7 @@ export interface FileRouteTypes {
     | '/portal-terapis/dashboard'
     | '/portal-yayasan/auth'
     | '/portal-yayasan/dashboard'
+    | '/portal-terapis/dashboard/program/$id'
     | '/acara/$id'
     | '/anak-saya/$id'
     | '/artikel/$slug'
@@ -1188,6 +1253,8 @@ export interface FileRouteTypes {
     | '/konsultasi/riwayat'
     | '/layanan/$serviceId'
     | '/pelatihan/$id'
+    | '/program/$id'
+    | '/program/ambil'
     | '/terapis/$id'
     | '/admin/dashboard/acara'
     | '/admin/dashboard/appointments'
@@ -1213,6 +1280,7 @@ export interface FileRouteTypes {
     | '/portal-terapis/dashboard/pelatihan'
     | '/portal-terapis/dashboard/pengaturan'
     | '/portal-terapis/dashboard/profil'
+    | '/portal-terapis/dashboard/program'
     | '/portal-terapis/dashboard/ulasan'
     | '/portal-yayasan/dashboard/acara'
     | '/portal-yayasan/dashboard/appointment'
@@ -1225,6 +1293,7 @@ export interface FileRouteTypes {
     | '/portal-yayasan/dashboard/terapis'
     | '/portal-yayasan/dashboard/ulasan'
     | '/konsultasi/bayar/$id'
+    | '/program/bayar/$id'
   id:
     | '__root__'
     | '/_public'
@@ -1277,6 +1346,7 @@ export interface FileRouteTypes {
     | '/_public/layanan/'
     | '/_public/pelatihan/'
     | '/_public/profil/'
+    | '/_public/program/'
     | '/_public/rekomendasi/'
     | '/_public/skrining-denver/'
     | '/_public/syarat-ketentuan/'
@@ -1289,6 +1359,7 @@ export interface FileRouteTypes {
     | '/portal-terapis/dashboard/'
     | '/portal-yayasan/auth/'
     | '/portal-yayasan/dashboard/'
+    | '/portal-terapis/dashboard/program/$id'
     | '/_public/acara/$id/'
     | '/_public/anak-saya/$id/'
     | '/_public/artikel/$slug/'
@@ -1299,6 +1370,8 @@ export interface FileRouteTypes {
     | '/_public/konsultasi/riwayat/'
     | '/_public/layanan/$serviceId/'
     | '/_public/pelatihan/$id/'
+    | '/_public/program/$id/'
+    | '/_public/program/ambil/'
     | '/_public/terapis/$id/'
     | '/admin/dashboard/acara/'
     | '/admin/dashboard/appointments/'
@@ -1324,6 +1397,7 @@ export interface FileRouteTypes {
     | '/portal-terapis/dashboard/pelatihan/'
     | '/portal-terapis/dashboard/pengaturan/'
     | '/portal-terapis/dashboard/profil/'
+    | '/portal-terapis/dashboard/program/'
     | '/portal-terapis/dashboard/ulasan/'
     | '/portal-yayasan/dashboard/acara/'
     | '/portal-yayasan/dashboard/appointment/'
@@ -1336,6 +1410,7 @@ export interface FileRouteTypes {
     | '/portal-yayasan/dashboard/terapis/'
     | '/portal-yayasan/dashboard/ulasan/'
     | '/_public/konsultasi/bayar/$id/'
+    | '/_public/program/bayar/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1700,6 +1775,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicProfilIndexRouteImport
       parentRoute: typeof PublicRouteRoute
     }
+    '/_public/program/': {
+      id: '/_public/program/'
+      path: '/program'
+      fullPath: '/program/'
+      preLoaderRoute: typeof PublicProgramIndexRouteImport
+      parentRoute: typeof PublicRouteRoute
+    }
     '/_public/rekomendasi/': {
       id: '/_public/rekomendasi/'
       path: '/rekomendasi'
@@ -1853,6 +1935,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/pelatihan/$id/'
       preLoaderRoute: typeof PublicPelatihanIdIndexRouteImport
       parentRoute: typeof PublicPelatihanRouteRoute
+    }
+    '/_public/program/$id/': {
+      id: '/_public/program/$id/'
+      path: '/program/$id'
+      fullPath: '/program/$id/'
+      preLoaderRoute: typeof PublicProgramIdIndexRouteImport
+      parentRoute: typeof PublicRouteRoute
+    }
+    '/_public/program/ambil/': {
+      id: '/_public/program/ambil/'
+      path: '/program/ambil'
+      fullPath: '/program/ambil/'
+      preLoaderRoute: typeof PublicProgramAmbilIndexRouteImport
+      parentRoute: typeof PublicRouteRoute
     }
     '/_public/terapis/$id/': {
       id: '/_public/terapis/$id/'
@@ -2029,6 +2125,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalTerapisDashboardProfilIndexRouteImport
       parentRoute: typeof PortalTerapisDashboardRouteRoute
     }
+    '/portal-terapis/dashboard/program/': {
+      id: '/portal-terapis/dashboard/program/'
+      path: '/program'
+      fullPath: '/portal-terapis/dashboard/program/'
+      preLoaderRoute: typeof PortalTerapisDashboardProgramIndexRouteImport
+      parentRoute: typeof PortalTerapisDashboardRouteRoute
+    }
+    '/portal-terapis/dashboard/program/$id': {
+      id: '/portal-terapis/dashboard/program/$id'
+      path: '/program/$id'
+      fullPath: '/portal-terapis/dashboard/program/$id'
+      preLoaderRoute: typeof PortalTerapisDashboardProgramIdRouteImport
+      parentRoute: typeof PortalTerapisDashboardRouteRoute
+    }
     '/portal-terapis/dashboard/ulasan/': {
       id: '/portal-terapis/dashboard/ulasan/'
       path: '/ulasan'
@@ -2111,6 +2221,13 @@ declare module '@tanstack/react-router' {
       path: '/konsultasi/bayar/$id'
       fullPath: '/konsultasi/bayar/$id/'
       preLoaderRoute: typeof PublicKonsultasiBayarIdIndexRouteImport
+      parentRoute: typeof PublicRouteRoute
+    }
+    '/_public/program/bayar/$id/': {
+      id: '/_public/program/bayar/$id/'
+      path: '/program/bayar/$id'
+      fullPath: '/program/bayar/$id/'
+      preLoaderRoute: typeof PublicProgramBayarIdIndexRouteImport
       parentRoute: typeof PublicRouteRoute
     }
   }
@@ -2330,13 +2447,17 @@ interface PublicRouteRouteChildren {
   PublicKemitraanIndexRoute: typeof PublicKemitraanIndexRoute
   PublicKonsultasiIndexRoute: typeof PublicKonsultasiIndexRoute
   PublicProfilIndexRoute: typeof PublicProfilIndexRoute
+  PublicProgramIndexRoute: typeof PublicProgramIndexRoute
   PublicRekomendasiIndexRoute: typeof PublicRekomendasiIndexRoute
   PublicSkriningDenverIndexRoute: typeof PublicSkriningDenverIndexRoute
   PublicTumbuhKembangIndexRoute: typeof PublicTumbuhKembangIndexRoute
   PublicAnakSayaIdIndexRoute: typeof PublicAnakSayaIdIndexRoute
   PublicKonsultasiMulaiIndexRoute: typeof PublicKonsultasiMulaiIndexRoute
   PublicKonsultasiRiwayatIndexRoute: typeof PublicKonsultasiRiwayatIndexRoute
+  PublicProgramIdIndexRoute: typeof PublicProgramIdIndexRoute
+  PublicProgramAmbilIndexRoute: typeof PublicProgramAmbilIndexRoute
   PublicKonsultasiBayarIdIndexRoute: typeof PublicKonsultasiBayarIdIndexRoute
+  PublicProgramBayarIdIndexRoute: typeof PublicProgramBayarIdIndexRoute
 }
 
 const PublicRouteRouteChildren: PublicRouteRouteChildren = {
@@ -2365,13 +2486,17 @@ const PublicRouteRouteChildren: PublicRouteRouteChildren = {
   PublicKemitraanIndexRoute: PublicKemitraanIndexRoute,
   PublicKonsultasiIndexRoute: PublicKonsultasiIndexRoute,
   PublicProfilIndexRoute: PublicProfilIndexRoute,
+  PublicProgramIndexRoute: PublicProgramIndexRoute,
   PublicRekomendasiIndexRoute: PublicRekomendasiIndexRoute,
   PublicSkriningDenverIndexRoute: PublicSkriningDenverIndexRoute,
   PublicTumbuhKembangIndexRoute: PublicTumbuhKembangIndexRoute,
   PublicAnakSayaIdIndexRoute: PublicAnakSayaIdIndexRoute,
   PublicKonsultasiMulaiIndexRoute: PublicKonsultasiMulaiIndexRoute,
   PublicKonsultasiRiwayatIndexRoute: PublicKonsultasiRiwayatIndexRoute,
+  PublicProgramIdIndexRoute: PublicProgramIdIndexRoute,
+  PublicProgramAmbilIndexRoute: PublicProgramAmbilIndexRoute,
   PublicKonsultasiBayarIdIndexRoute: PublicKonsultasiBayarIdIndexRoute,
+  PublicProgramBayarIdIndexRoute: PublicProgramBayarIdIndexRoute,
 }
 
 const PublicRouteRouteWithChildren = PublicRouteRoute._addFileChildren(
@@ -2437,6 +2562,7 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface PortalTerapisDashboardRouteRouteChildren {
   PortalTerapisDashboardIndexRoute: typeof PortalTerapisDashboardIndexRoute
+  PortalTerapisDashboardProgramIdRoute: typeof PortalTerapisDashboardProgramIdRoute
   PortalTerapisDashboardAfiliasiIndexRoute: typeof PortalTerapisDashboardAfiliasiIndexRoute
   PortalTerapisDashboardAppointmentsIndexRoute: typeof PortalTerapisDashboardAppointmentsIndexRoute
   PortalTerapisDashboardJadwalIndexRoute: typeof PortalTerapisDashboardJadwalIndexRoute
@@ -2446,12 +2572,14 @@ interface PortalTerapisDashboardRouteRouteChildren {
   PortalTerapisDashboardPelatihanIndexRoute: typeof PortalTerapisDashboardPelatihanIndexRoute
   PortalTerapisDashboardPengaturanIndexRoute: typeof PortalTerapisDashboardPengaturanIndexRoute
   PortalTerapisDashboardProfilIndexRoute: typeof PortalTerapisDashboardProfilIndexRoute
+  PortalTerapisDashboardProgramIndexRoute: typeof PortalTerapisDashboardProgramIndexRoute
   PortalTerapisDashboardUlasanIndexRoute: typeof PortalTerapisDashboardUlasanIndexRoute
 }
 
 const PortalTerapisDashboardRouteRouteChildren: PortalTerapisDashboardRouteRouteChildren =
   {
     PortalTerapisDashboardIndexRoute: PortalTerapisDashboardIndexRoute,
+    PortalTerapisDashboardProgramIdRoute: PortalTerapisDashboardProgramIdRoute,
     PortalTerapisDashboardAfiliasiIndexRoute:
       PortalTerapisDashboardAfiliasiIndexRoute,
     PortalTerapisDashboardAppointmentsIndexRoute:
@@ -2470,6 +2598,8 @@ const PortalTerapisDashboardRouteRouteChildren: PortalTerapisDashboardRouteRoute
       PortalTerapisDashboardPengaturanIndexRoute,
     PortalTerapisDashboardProfilIndexRoute:
       PortalTerapisDashboardProfilIndexRoute,
+    PortalTerapisDashboardProgramIndexRoute:
+      PortalTerapisDashboardProgramIndexRoute,
     PortalTerapisDashboardUlasanIndexRoute:
       PortalTerapisDashboardUlasanIndexRoute,
   }
@@ -2567,13 +2697,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

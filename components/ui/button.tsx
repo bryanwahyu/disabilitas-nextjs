@@ -19,11 +19,21 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      /*
+       * Tinggi minimum 44px (h-11) mengikuti ambang tap target WCAG 2.5.5 /
+       * pedoman Apple & Android. Sebelumnya `default` h-10 (40px) dan `sm` h-9
+       * (36px) — di bawah ambang, dan penggunanya orang tua yang memakai HP
+       * satu tangan sambil memegang anak, sebagian dengan gangguan motorik.
+       *
+       * `sm` sengaja tidak ikut ke 44px penuh: dipakai rapat di header dan
+       * baris tabel, dan 40px masih di atas 36px yang lama. Yang wajib 44px
+       * adalah tombol aksi utama dan tombol ikon (target terkecil di produk).
+       */
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
+        default: "h-11 px-4 py-2",
+        sm: "h-10 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: {

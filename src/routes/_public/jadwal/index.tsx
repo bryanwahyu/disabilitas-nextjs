@@ -103,6 +103,8 @@ function JadwalPage() {
         return <Badge className="bg-green-100 text-green-800">Dikonfirmasi</Badge>;
       case 'completed':
         return <Badge className="bg-blue-100 text-blue-800">Selesai</Badge>;
+      case 'no_show':
+        return <Badge className="bg-amber-100 text-amber-800">Tidak hadir</Badge>;
       case 'cancelled':
         return <Badge className="bg-red-100 text-red-800">Dibatalkan</Badge>;
       default:
@@ -130,10 +132,10 @@ function JadwalPage() {
 
   const now = new Date();
   const upcomingAppointments = appointments.filter(
-    (a) => new Date(a.start_at) >= now && a.status !== 'cancelled'
+    (a) => new Date(a.start_at) >= now && a.status !== 'cancelled' && a.status !== 'no_show'
   );
   const pastAppointments = appointments.filter(
-    (a) => new Date(a.start_at) < now || a.status === 'completed'
+    (a) => new Date(a.start_at) < now || a.status === 'completed' || a.status === 'no_show'
   );
   const cancelledAppointments = appointments.filter((a) => a.status === 'cancelled');
 

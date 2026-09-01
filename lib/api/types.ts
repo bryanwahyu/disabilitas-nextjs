@@ -1443,7 +1443,8 @@ export interface TherapySlotPref {
 export interface TherapyProgram {
   id: string;
   user_id: string;
-  child_id: string;
+  /** Kosong bila program untuk pemesannya sendiri (pengguna dewasa). */
+  child_id?: string;
   provider_id: string;
   therapist_id?: string;
   location_id?: string;
@@ -1537,7 +1538,8 @@ export interface TherapyProgramListItem extends TherapyProgram {
 }
 
 export interface TherapyProgramInput {
-  child_id: string;
+  /** Kosongkan untuk program atas nama diri sendiri. */
+  child_id?: string;
   provider_id: string;
   therapist_id?: string;
   location_id?: string;
