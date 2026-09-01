@@ -1,10 +1,10 @@
-'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Centrifuge, Subscription, PublicationContext } from 'centrifuge';
+import { env } from '@/lib/env';
 
-const CENTRIFUGO_URL = process.env.NEXT_PUBLIC_CENTRIFUGO_URL || 'ws://localhost:8090/connection/websocket';
-const AUTH_TOKEN_KEY = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+const CENTRIFUGO_URL = env.centrifugoUrl;
+const AUTH_TOKEN_KEY = env.authTokenKey;
 
 export interface UseCentrifugoReturn {
   client: Centrifuge | null;

@@ -1,33 +1,32 @@
-'use client';
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { Link } from '@tanstack/react-router';
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import {
   LayoutDashboard, MapPin, Users, Calendar, MessageSquare,
   BookOpen, PartyPopper, Star, User, Settings, LogOut, Building2, Tag,
 } from 'lucide-react';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/lokasi', label: 'Lokasi', icon: MapPin },
-  { href: '/dashboard/terapis', label: 'Terapis', icon: Users },
-  { href: '/dashboard/jadwal', label: 'Jadwal', icon: Calendar },
-  { href: '/dashboard/harga', label: 'Harga', icon: Tag },
-  { href: '/dashboard/appointment', label: 'Appointment', icon: MessageSquare },
-  { href: '/dashboard/pelatihan', label: 'Pelatihan', icon: BookOpen },
-  { href: '/dashboard/acara', label: 'Acara', icon: PartyPopper },
-  { href: '/dashboard/ulasan', label: 'Ulasan', icon: Star },
-  { href: '/dashboard/profil', label: 'Profil', icon: User },
-  { href: '/dashboard/pengaturan', label: 'Pengaturan', icon: Settings },
+  { href: '/portal-yayasan/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/portal-yayasan/dashboard/lokasi', label: 'Lokasi', icon: MapPin },
+  { href: '/portal-yayasan/dashboard/terapis', label: 'Terapis', icon: Users },
+  { href: '/portal-yayasan/dashboard/jadwal', label: 'Jadwal', icon: Calendar },
+  { href: '/portal-yayasan/dashboard/harga', label: 'Harga', icon: Tag },
+  { href: '/portal-yayasan/dashboard/appointment', label: 'Appointment', icon: MessageSquare },
+  { href: '/portal-yayasan/dashboard/pelatihan', label: 'Pelatihan', icon: BookOpen },
+  { href: '/portal-yayasan/dashboard/acara', label: 'Acara', icon: PartyPopper },
+  { href: '/portal-yayasan/dashboard/ulasan', label: 'Ulasan', icon: Star },
+  { href: '/portal-yayasan/dashboard/profil', label: 'Profil', icon: User },
+  { href: '/portal-yayasan/dashboard/pengaturan', label: 'Pengaturan', icon: Settings },
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     localStorage.removeItem('yayasan_token');
-    router.push('/auth');
+    navigate({ to: '/portal-yayasan/auth' });
   };
 
   return (
@@ -45,13 +44,13 @@ export function Sidebar() {
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.href === '/dashboard'
-            ? pathname === '/dashboard'
+          const isActive = item.href === '/portal-yayasan/dashboard'
+            ? pathname === '/portal-yayasan/dashboard'
             : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
-              href={item.href}
+              to={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-blue-600/20 text-blue-300 border border-blue-500/20'

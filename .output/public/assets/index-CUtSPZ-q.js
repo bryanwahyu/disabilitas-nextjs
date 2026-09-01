@@ -1,0 +1,1 @@
+import{j as a}from"./index-aW8G_VO-.js";function s(){return a.jsxs("div",{className:"p-8",children:[a.jsx("h1",{className:"text-2xl font-bold text-white mb-2",children:"afiliasi"}),a.jsx("p",{className:"text-slate-400 text-sm",children:"Halaman ini sedang dalam pengembangan."})]})}export{s as component};

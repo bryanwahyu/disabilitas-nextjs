@@ -1,6 +1,6 @@
-'use client';
 
 import { useState, useEffect } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,132 +15,108 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api/client';
-import type { Country, State, City } from '@/lib/api/types';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { MapPin, Building2, Phone, Mail, Globe, User, Send, FileCheck } from 'lucide-react';
 
+const EMPTY_FORM = {
+  name: '',
+  address: '',
+  city_code: '',
+  description: '',
+  phone: '',
+  website: '',
+  contact_person: '',
+  provider_name: '',
+  provider_email: '',
+  provider_phone: '',
+};
+
 const TherapyLocationRegistrationForm = () => {
-  const [loading, setLoading] = useState(false);
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [states, setStates] = useState<State[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [selectedState, setSelectedState] = useState<string>('');
 
-  const [formData, setFormData] = useState({
-    name: '',
-    address: '',
-    city_code: '',
-    description: '',
-    phone: '',
-    website: '',
-    contact_person: '',
-    provider_name: '',
-    provider_email: '',
-    provider_phone: '',
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [verificationFile, setVerificationFile] = useState<File | null>(null);
 
   const { toast } = useToast();
 
+  const { data: countries = [] } = useQuery({
+    queryKey: qk.locations.of('countries'),
+    queryFn: () => unwrap(apiClient.locations.countries()),
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const { data: states = [] } = useQuery({
+    queryKey: qk.locations.of('states', { country: selectedCountry }),
+    queryFn: () => unwrap(apiClient.locations.states(selectedCountry)),
+    enabled: !!selectedCountry,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const { data: cities = [] } = useQuery({
+    queryKey: qk.locations.of('cities', { state: selectedState }),
+    queryFn: () => unwrap(apiClient.locations.cities(selectedState)),
+    enabled: !!selectedState,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  // Indonesia dipilih otomatis begitu daftar negara tersedia, selama pengguna
+  // belum memilih sendiri.
   useEffect(() => {
-    fetchCountries();
-  }, []);
+    if (selectedCountry) return;
+    if (countries.some((c) => c.code === 'ID')) setSelectedCountry('ID');
+  }, [countries, selectedCountry]);
 
   useEffect(() => {
-    if (selectedCountry) {
-      fetchStates(selectedCountry);
-      setSelectedState('');
-      setCities([]);
-      setFormData(prev => ({ ...prev, city_code: '' }));
-    }
+    if (!selectedCountry) return;
+    setSelectedState('');
+    setFormData(prev => ({ ...prev, city_code: '' }));
   }, [selectedCountry]);
 
   useEffect(() => {
-    if (selectedState) {
-      fetchCities(selectedState);
-      setFormData(prev => ({ ...prev, city_code: '' }));
-    }
+    if (!selectedState) return;
+    setFormData(prev => ({ ...prev, city_code: '' }));
   }, [selectedState]);
 
-  const fetchCountries = async () => {
-    const response = await apiClient.locations.countries();
-    if (response.data) {
-      setCountries(response.data);
-      // Auto-select Indonesia if available
-      const indonesia = response.data.find(c => c.code === 'ID');
-      if (indonesia) {
-        setSelectedCountry('ID');
-      }
-    }
-  };
-
-  const fetchStates = async (countryCode: string) => {
-    const response = await apiClient.locations.states(countryCode);
-    if (response.data) {
-      setStates(response.data);
-    }
-  };
-
-  const fetchCities = async (stateCode: string) => {
-    const response = await apiClient.locations.cities(stateCode);
-    if (response.data) {
-      setCities(response.data);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const response = await apiClient.public.therapyLocationRegister.submit({
-        name: formData.name,
-        address: formData.address,
-        city_code: formData.city_code || undefined,
-        description: formData.description || undefined,
-        phone: formData.phone,
-        email: formData.provider_email,
-        website: formData.website || undefined,
-        contact_person: formData.contact_person,
-        provider_name: formData.provider_name,
-        provider_email: formData.provider_email,
-        provider_phone: formData.provider_phone,
-      });
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
+  const { mutate: submitRegistration, isPending: loading } = useMutation({
+    mutationFn: () =>
+      unwrap(
+        apiClient.public.therapyLocationRegister.submit({
+          name: formData.name,
+          address: formData.address,
+          city_code: formData.city_code || undefined,
+          description: formData.description || undefined,
+          phone: formData.phone,
+          email: formData.provider_email,
+          website: formData.website || undefined,
+          contact_person: formData.contact_person,
+          provider_name: formData.provider_name,
+          provider_email: formData.provider_email,
+          provider_phone: formData.provider_phone,
+        })
+      ),
+    onSuccess: () => {
       toast({
         title: "Pendaftaran Berhasil!",
         description: "Lokasi terapi Anda telah didaftarkan dan menunggu verifikasi dari admin.",
       });
-
-      // Reset form
-      setFormData({
-        name: '',
-        address: '',
-        city_code: '',
-        description: '',
-        phone: '',
-        website: '',
-        contact_person: '',
-        provider_name: '',
-        provider_email: '',
-        provider_phone: '',
-      });
+      setFormData(EMPTY_FORM);
       setVerificationFile(null);
       setSelectedState('');
-      setCities([]);
-    } catch (error: any) {
+    },
+    onError: (error: Error) => {
       toast({
         title: "Gagal Mendaftar",
         description: error.message || "Terjadi kesalahan saat mendaftar. Silakan coba lagi.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitRegistration();
   };
 
   return (

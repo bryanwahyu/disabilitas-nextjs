@@ -1,7 +1,9 @@
-'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,10 +25,6 @@ type Level = 'countries' | 'states' | 'cities';
 
 const MasterLokasiManager = () => {
   const [level, setLevel] = useState<Level>('countries');
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [states, setStates] = useState<State[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
@@ -36,52 +34,61 @@ const MasterLokasiManager = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [formData, setFormData] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ code: string; name: string; level: Level } | null>(null);
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchCountries = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiClient.locations.countries({ limit: 300 });
-      setCountries(Array.isArray(res.data) ? res.data : []);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
+  // Master data wilayah nyaris tak berubah — cukup sekali per sesi.
+  const MASTER_STALE = 30 * 60 * 1000;
 
-  const fetchStates = useCallback(async (countryCode: string) => {
-    setLoading(true);
-    try {
-      const res = await apiClient.locations.states(countryCode, { limit: 500 });
-      setStates(Array.isArray(res.data) ? res.data : []);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
+  const countriesQuery = useQuery({
+    queryKey: qk.admin.locations.list({ level: 'countries' }),
+    queryFn: () => unwrap(apiClient.locations.countries({ limit: 300 })),
+    staleTime: MASTER_STALE,
+  });
 
-  const fetchCities = useCallback(async (stateCode: string) => {
-    setLoading(true);
-    try {
-      const res = await apiClient.locations.cities(stateCode, { limit: 1000 });
-      setCities(Array.isArray(res.data) ? res.data : []);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
+  const statesQuery = useQuery({
+    queryKey: qk.admin.locations.list({ level: 'states', country: selectedCountry?.code }),
+    queryFn: () => unwrap(apiClient.locations.states(selectedCountry!.code, { limit: 500 })),
+    enabled: !!selectedCountry,
+    staleTime: MASTER_STALE,
+  });
 
-  useEffect(() => { fetchCountries(); }, [fetchCountries]);
+  const citiesQuery = useQuery({
+    queryKey: qk.admin.locations.list({ level: 'cities', state: selectedState?.code }),
+    queryFn: () => unwrap(apiClient.locations.cities(selectedState!.code, { limit: 1000 })),
+    enabled: !!selectedState,
+    staleTime: MASTER_STALE,
+  });
+
+  const countries: Country[] = Array.isArray(countriesQuery.data) ? countriesQuery.data : [];
+  const states: State[] = Array.isArray(statesQuery.data) ? statesQuery.data : [];
+  const cities: City[] = Array.isArray(citiesQuery.data) ? citiesQuery.data : [];
+
+  const loading =
+    level === 'countries'
+      ? countriesQuery.isPending
+      : level === 'states'
+        ? statesQuery.isPending
+        : citiesQuery.isPending;
+
+  const invalidateLocations = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.locations.lists() });
 
   const navigateToStates = (country: Country) => {
     setSelectedCountry(country);
     setSelectedState(null);
     setLevel('states');
     setSearchTerm('');
-    fetchStates(country.code);
   };
 
   const navigateToCities = (state: State) => {
     setSelectedState(state);
     setLevel('cities');
     setSearchTerm('');
-    fetchCities(state.code);
   };
 
   const goBack = () => {
@@ -89,7 +96,6 @@ const MasterLokasiManager = () => {
     if (level === 'cities') {
       setLevel('states');
       setSelectedState(null);
-      if (selectedCountry) fetchStates(selectedCountry.code);
     } else if (level === 'states') {
       setLevel('countries');
       setSelectedCountry(null);
@@ -110,62 +116,50 @@ const MasterLokasiManager = () => {
     setDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const { mutate: saveLocation, isPending: saving } = useMutation({
+    mutationFn: async () => {
       if (level === 'countries') {
-        if (dialogMode === 'create') {
-          const res = await apiClient.adminLocations.createCountry({ code: formData.code, name: formData.name });
-          if (res.error) throw new Error(res.error);
-        } else {
-          const res = await apiClient.adminLocations.updateCountry(formData.code, formData.name);
-          if (res.error) throw new Error(res.error);
-        }
-        fetchCountries();
-      } else if (level === 'states') {
-        if (dialogMode === 'create') {
-          const res = await apiClient.adminLocations.createState({
-            code: formData.code,
-            country_code: selectedCountry!.code,
-            name: formData.name,
-          });
-          if (res.error) throw new Error(res.error);
-        } else {
-          const res = await apiClient.adminLocations.updateState(formData.code, { name: formData.name });
-          if (res.error) throw new Error(res.error);
-        }
-        fetchStates(selectedCountry!.code);
-      } else {
-        const aliases = formData.aliases
-          ? formData.aliases.split(',').map((a: string) => a.trim()).filter(Boolean)
-          : [];
-        if (dialogMode === 'create') {
-          const res = await apiClient.adminLocations.createCity({
+        return dialogMode === 'create'
+          ? unwrap(apiClient.adminLocations.createCountry({ code: formData.code, name: formData.name }))
+          : unwrap(apiClient.adminLocations.updateCountry(formData.code, formData.name));
+      }
+      if (level === 'states') {
+        return dialogMode === 'create'
+          ? unwrap(apiClient.adminLocations.createState({
+              code: formData.code,
+              country_code: selectedCountry!.code,
+              name: formData.name,
+            }))
+          : unwrap(apiClient.adminLocations.updateState(formData.code, { name: formData.name }));
+      }
+      const aliases = formData.aliases
+        ? formData.aliases.split(',').map((a: string) => a.trim()).filter(Boolean)
+        : [];
+      return dialogMode === 'create'
+        ? unwrap(apiClient.adminLocations.createCity({
             code: formData.code,
             state_code: selectedState!.code,
             name: formData.name,
             type: formData.type || 'city',
             aliases,
-          });
-          if (res.error) throw new Error(res.error);
-        } else {
-          const res = await apiClient.adminLocations.updateCity(formData.code, {
+          }))
+        : unwrap(apiClient.adminLocations.updateCity(formData.code, {
             name: formData.name,
             type: formData.type,
             aliases,
-          });
-          if (res.error) throw new Error(res.error);
-        }
-        fetchCities(selectedState!.code);
-      }
+          }));
+    },
+    onSuccess: () => {
       toast({ title: 'Berhasil', description: dialogMode === 'create' ? 'Data berhasil ditambahkan' : 'Data berhasil diperbarui' });
       setDialogOpen(false);
-    } catch (error: any) {
+      invalidateLocations();
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal menyimpan', variant: 'destructive' });
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+  });
+
+  const handleSave = () => saveLocation();
 
   // DELETE
   const confirmDelete = (code: string, name: string) => {
@@ -173,26 +167,25 @@ const MasterLokasiManager = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      let res;
-      if (deleteTarget.level === 'countries') {
-        res = await apiClient.adminLocations.deleteCountry(deleteTarget.code);
-      } else if (deleteTarget.level === 'states') {
-        res = await apiClient.adminLocations.deleteState(deleteTarget.code);
-      } else {
-        res = await apiClient.adminLocations.deleteCity(deleteTarget.code);
-      }
-      if (res?.error) throw new Error(res.error);
-      toast({ title: 'Berhasil', description: `${deleteTarget.name} dihapus` });
+  const { mutate: removeLocation } = useMutation({
+    mutationFn: (target: { code: string; name: string; level: Level }) => {
+      if (target.level === 'countries') return unwrap(apiClient.adminLocations.deleteCountry(target.code));
+      if (target.level === 'states') return unwrap(apiClient.adminLocations.deleteState(target.code));
+      return unwrap(apiClient.adminLocations.deleteCity(target.code));
+    },
+    onSuccess: (_data, target) => {
+      toast({ title: 'Berhasil', description: `${target.name} dihapus` });
       setDeleteDialogOpen(false);
-      if (deleteTarget.level === 'countries') fetchCountries();
-      else if (deleteTarget.level === 'states' && selectedCountry) fetchStates(selectedCountry.code);
-      else if (deleteTarget.level === 'cities' && selectedState) fetchCities(selectedState.code);
-    } catch (error: any) {
+      invalidateLocations();
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal menghapus', variant: 'destructive' });
-    }
+    },
+  });
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    removeLocation(deleteTarget);
   };
 
   // Breadcrumb
@@ -209,7 +202,7 @@ const MasterLokasiManager = () => {
           <ChevronRight className="w-3 h-3" />
           <button
             className={`hover:text-primary ${level === 'states' ? 'font-semibold text-primary' : ''}`}
-            onClick={() => { setLevel('states'); setSelectedState(null); setSearchTerm(''); fetchStates(selectedCountry.code); }}
+            onClick={() => { setLevel('states'); setSelectedState(null); setSearchTerm(''); }}
           >
             {selectedCountry.name}
           </button>
@@ -296,7 +289,7 @@ const MasterLokasiManager = () => {
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-gray-400" />
+            <Search className="w-4 h-4 text-gray-500" />
             <Input
               placeholder={`Cari ${levelLabel.toLowerCase()}...`}
               value={searchTerm}
@@ -333,7 +326,7 @@ const MasterLokasiManager = () => {
                       <Badge variant="secondary" className="text-xs">{item.extra}</Badge>
                     )}
                     {level !== 'cities' && (
-                      <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

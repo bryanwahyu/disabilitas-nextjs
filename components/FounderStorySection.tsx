@@ -1,6 +1,5 @@
 import { ExternalLink, ArrowRight, TrendingUp, Building2, Users } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 
 const FounderStorySection = () => {
   return (
@@ -26,7 +25,9 @@ const FounderStorySection = () => {
           <div className="lg:col-span-2 flex flex-col items-center gap-6">
             <div className="relative">
               <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl">
-                <Image
+                <img
+                  loading="lazy"
+                  decoding="async"
                   src="/images/founder-bryan.png"
                   alt="Bryan Wahyu Kresna Putra - Founder DisabilitasKu.id, penyandang Cerebral Palsy dan Technical Architect"
                   width={256}
@@ -166,7 +167,7 @@ const FounderStorySection = () => {
                   bukan sekadar kegiatan seremonial.
                 </p>
                 <Link
-                  href="/kemitraan"
+                  to="/kemitraan"
                   className="inline-flex items-center gap-1.5 text-amber-400 text-xs font-semibold hover:gap-2.5 transition-all"
                 >
                   Diskusi Program CSR <ArrowRight className="w-3.5 h-3.5" />
@@ -184,12 +185,12 @@ const FounderStorySection = () => {
                   Pasar yang besar, underserved, dan didukung regulasi. Dibangun oleh
                   founder dengan lived experience dan track record teknis yang terbukti.
                 </p>
-                <Link
-                  href="/mitra"
+                <a
+                  href="mailto:bryanwahyukp95@gmail.com?subject=Peluang%20Investasi%20Disabilitasku"
                   className="inline-flex items-center gap-1.5 text-violet-400 text-xs font-semibold hover:gap-2.5 transition-all"
                 >
-                  Pelajari Peluang Investasi <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                  Diskusikan Peluang Investasi <ArrowRight className="w-3.5 h-3.5" />
+                </a>
               </div>
             </div>
 

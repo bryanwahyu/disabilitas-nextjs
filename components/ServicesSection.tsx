@@ -1,5 +1,5 @@
 import { ArrowRight, Heart, Users, BookOpen, CheckCircle } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 
 const ServicesSection = () => {
   const services = [
@@ -68,7 +68,7 @@ const ServicesSection = () => {
             return (
               <Link
                 key={service.id}
-                href={service.href}
+                to={service.href}
                 className={`group relative block rounded-2xl ${service.lightBg} border border-white/60 p-6 sm:p-8 cursor-pointer transition-all duration-350 hover:shadow-xl hover:-translate-y-1`}
               >
                 {/* Icon */}

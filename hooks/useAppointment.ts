@@ -21,9 +21,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.getAppointment(id);
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setAppointmentState(prev => ({ ...prev, isLoading: false, appointment: response.data as Appointment }));
       return response;
@@ -37,9 +38,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.listAppointments();
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setAppointmentState(prev => ({
         ...prev,
@@ -57,9 +59,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.getUserAppointments(userId);
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setAppointmentState(prev => ({
         ...prev,
@@ -77,9 +80,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.getTherapistAppointments(therapistId);
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setAppointmentState(prev => ({
         ...prev,
@@ -97,9 +101,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.createAppointment(data);
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       // Add the new appointment to the list
       setAppointmentState(prev => ({
@@ -118,9 +123,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.updateAppointment(id, data);
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       // Update the appointment in the list
       setAppointmentState(prev => ({
@@ -141,9 +147,10 @@ export const useAppointment = () => {
     setAppointmentState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await appointmentService.deleteAppointment(id);
-      if (response.error) {
-        setAppointmentState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setAppointmentState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       // Remove the appointment from the list
       setAppointmentState(prev => ({ 

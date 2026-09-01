@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 import { Search, CalendarCheck, MessageCircle, ArrowRight } from 'lucide-react';
 
 const steps = [
@@ -74,7 +74,7 @@ export default function HowItWorks() {
 
         <div className="text-center">
           <Link
-            href="/terapis"
+            to="/terapis"
             className="inline-flex items-center gap-2 bg-primary text-white font-semibold px-6 py-3 rounded-xl hover:bg-primary/90 transition-colors text-sm"
           >
             Mulai Cari Terapis <ArrowRight className="w-4 h-4" />

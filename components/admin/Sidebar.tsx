@@ -1,12 +1,12 @@
-'use client';
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { Link } from '@tanstack/react-router';
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/hooks/useAuth';
 import {
   LayoutDashboard, Users, MapPin, FileText, BookOpen,
-  Briefcase, MessageSquare, Calendar, Bell, CalendarOff,
+  MessageSquare, Calendar, Bell, CalendarOff,
   Mail, Settings, LogOut, Shield, Handshake, CalendarCheck, Tag, Wallet,
+  MessageSquareWarning,
 } from 'lucide-react';
 
 const navItems = [
@@ -17,7 +17,7 @@ const navItems = [
   { href: '/dashboard/lokasi', label: 'Lokasi Terapi', icon: MapPin },
   { href: '/dashboard/artikel', label: 'Artikel', icon: FileText },
   { href: '/dashboard/pelatihan', label: 'Pelatihan', icon: BookOpen },
-  { href: '/dashboard/lowongan', label: 'Lowongan', icon: Briefcase },
+  { href: '/dashboard/keluhan', label: 'Keluhan', icon: MessageSquareWarning },
   { href: '/dashboard/appointments', label: 'Janji Temu', icon: CalendarCheck },
   { href: '/dashboard/komunitas', label: 'Komunitas', icon: MessageSquare },
   { href: '/dashboard/acara', label: 'Acara', icon: Calendar },
@@ -29,13 +29,13 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const navigate = useNavigate();
   const { signOut, user } = useAuth();
 
   const handleLogout = async () => {
     await signOut();
-    router.push('/auth');
+    navigate({ to: '/admin/auth' });
   };
 
   return (
@@ -61,7 +61,7 @@ export function Sidebar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              to={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'

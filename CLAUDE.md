@@ -2,7 +2,7 @@
 
 ## Role
 
-You are a **senior product engineer**. See `../docs/product-engineer-guidelines.md` for full guidelines and `../docs/service-discovery-spec.md` for discovery feature spec.
+You are a **senior product engineer**. See `../docs/product-engineer-guidelines.md` for full guidelines and `../docs/datetime/specs/2026-04-03-service-discovery-design.md` for discovery feature spec.
 
 ## Aturan Penting
 
@@ -22,35 +22,31 @@ DisabilitasKu is a platform for disability services in Indonesia, providing:
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 with App Router
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS with shadcn/ui components
-- **State Management**: TanStack React Query for server state
-- **Authentication**: JWT tokens stored in localStorage
-- **API**: REST API backend (Go) at `NEXT_PUBLIC_API_BASE_URL`
+- **Framework**: TanStack Start (Router + Vite + Nitro, SSR penuh) — **Node ≥ 22.12 wajib**
+- **Language**: TypeScript (`strictNullChecks` aktif; `strict` penuh belum)
+- **Styling**: Tailwind CSS v4 + shadcn/ui. `src/globals.css` — folder di luar `src/` disebut
+  eksplisit lewat `@source`, jangan dihapus
+- **State Management**: TanStack React Query (QueryClient dibuat per-request di `src/router.tsx`)
+- **Authentication**: opaque token (`dsk_`) di localStorage
+- **API**: REST backend (Go) di `VITE_API_BASE_URL`
 
 ## Project Structure
 
 ```
-app/
-├── (public)/           # Public pages with Header/Footer layout
-│   ├── layout.tsx      # Public layout wrapper
-│   ├── page.tsx        # Home page (/)
-│   ├── auth/           # /auth - Login/Register
-│   ├── forum/          # /forum - Community forum
-│   ├── artikel/        # /artikel - Articles
-│   ├── layanan/        # /layanan - Services
-│   ├── acara/          # /acara - Events
-│   ├── komunitas/      # /komunitas - Communities
-│   ├── profil/         # /profil - User profile
-│   └── daftar-lokasi/  # /daftar-lokasi - Register location
-│
-├── (admin)/            # Admin pages with separate layout
-│   └── admin/          # /admin/* routes
-│
-├── layout.tsx          # Root layout with providers
-├── providers.tsx       # Client-side providers (QueryClient, Auth, etc.)
-└── globals.css         # Global styles and CSS variables
+src/
+├── router.tsx          # getRouter(): QueryClient PER-REQUEST (jangan jadikan singleton —
+│                       #   cache server akan bocor antar-user), SSR-query integration
+├── start.ts            # middleware global: CSRF (WAJIB manual) + security headers + portalGuard
+├── globals.css         # Tailwind v4 entry + @source
+├── routeTree.gen.ts    # DIGENERATE plugin Vite — jangan diedit tangan
+└── routes/
+    ├── __root.tsx      # dokumen HTML, head/SEO root, errorComponent, notFoundComponent
+    ├── -components/    # prefix `-` = BUKAN route (bukan `_`, itu pathless layout)
+    ├── sitemap[.]xml.ts# server route; `[.]` = titik bagian dari path
+    ├── _public/        # portal publik (pathless layout, tidak masuk URL)
+    ├── admin/          # /admin/*
+    ├── portal-terapis/ # /portal-terapis/*
+    └── portal-yayasan/ # /portal-yayasan/*
 
 components/
 ├── ui/                 # shadcn/ui components
@@ -73,11 +69,12 @@ lib/
 
 ## Key Conventions
 
-### Client vs Server Components
+### Isomorphic by default
 
-- Pages that need interactivity use `'use client'` directive
-- Server components are default for static content
-- SSG pages use `generateStaticParams()` for dynamic routes
+- **Tidak ada `'use client'`.** Komponen jalan di server dan klien sekaligus.
+- Kode khusus browser (`localStorage`, `window`) harus di dalam `useEffect` atau dijaga
+  `typeof window !== 'undefined'`.
+- Tidak ada SSG/prerender — SSR penuh (keputusan founder, demi SEO).
 
 ### API Client Pattern
 
@@ -100,40 +97,78 @@ const data = response.data;
 ### Navigation
 
 ```typescript
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link, useNavigate } from '@tanstack/react-router';
 
-// Link component
-<Link href="/artikel">Articles</Link>
+// Path statis
+<Link to="/artikel">Artikel</Link>
 
-// Programmatic navigation
-const router = useRouter();
-router.push('/admin');
+// Path dinamis — JANGAN interpolasi string, pakai params
+<Link to="/artikel/$slug" params={{ slug: article.slug }}>{article.title}</Link>
+
+// Query string → `search`, butuh `validateSearch` di route tujuan
+<Link to="/skrining-denver" search={{ age: 24 }}>Skrining</Link>
+
+// Programatik
+const navigate = useNavigate();
+navigate({ to: '/admin/dashboard' });
+navigate({ to: '/auth', search: { redirect: '/konsultasi/mulai' }, replace: true });
 ```
+
+`to` bertipe union path asli dari route tree — tautan rusak jadi error `tsc`, bukan 404 diam-diam.
+**Tautan internal portal wajib pakai prefix penuh** (`/portal-terapis/dashboard`), karena rewrite
+host `middleware.ts` Next tidak punya padanan.
+
+### Metadata / SEO
+
+`export const metadata` diganti `head` di route. Objek gaya Next dipertahankan dan diterjemahkan
+`metaFrom()` di `lib/seo/head.ts`:
+
+```typescript
+export const Route = createFileRoute('/_public/tentang/')({
+  head: () => metaFrom({ title: 'Tentang Kami', description: '…' }),
+});
+```
+
+Untuk metadata yang butuh data, pakai `loader` + `head({ loaderData })` — **jangan** `defer` field
+yang dipakai `head`, karena data ter-stream sampai setelah shell HTML dikirim.
+
+### Isi halaman wajib ikut SSR
+
+Halaman publik yang isinya dari `useQuery` **harus** punya `loader` yang memanggil
+`context.queryClient.ensureQueryData({ queryKey, queryFn })` dengan key & fn **identik** dengan
+komponennya. Tanpa itu `isPending` selalu true saat render server dan HTML yang dikirim ke crawler
+hanya spinner "Memuat…". Hanya query utama yang boleh memblokir render — query sekunder (jadwal,
+slot, rekomendasi) diberi penanda memuat di bagiannya sendiri.
+
+⚠️ `validateSearch` **jangan** mengembalikan nilai default (`tab: 'profil'`, `age: 0`). TanStack
+akan menormalkan URL dan setiap kunjungan dijawab 307 ke URL berparameter. Kembalikan `undefined`,
+beri default di pemakainya.
+
+⚠️ `head` induk ikut ke semua anaknya. `meta` di-dedup, **`links` tidak** — jadi jangan menaruh
+`canonical` di layout yang punya halaman detail.
 
 ## Environment Variables
 
+`VITE_*`, dibaca lewat `import.meta.env` dan **di-inline saat build** — menyetelnya sebagai env
+runtime container tidak berpengaruh, harus `--build-arg` (lihat `Dockerfile`).
+
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8082/v1
-NEXT_PUBLIC_API_TIMEOUT=10000
-NEXT_PUBLIC_AUTH_TOKEN_KEY=auth_token
-NEXT_PUBLIC_ADMIN_TOKEN_KEY=admin_token
+VITE_API_BASE_URL=http://localhost:8082/v1
+VITE_CENTRIFUGO_URL=ws://localhost:8000/connection/websocket
+VITE_SITE_URL=https://disabilitasku.id
+VITE_API_TIMEOUT=10000
 ```
 
 ## Commands
 
 ```bash
-# Development
-npm run dev
+# Node 22 wajib (mesin dev punya node@20 sebagai default):
+export PATH="/usr/local/opt/node@22/bin:$PATH"
 
-# Build
-npm run build
-
-# Production
-npm start
-
-# Lint
-npm run lint
+npm run dev      # vite dev
+npm run build    # vite build → .output/
+npm start        # node .output/server/index.mjs
+npx tsc --noEmit # typecheck (satu-satunya gerbang otomatis: vitest masih rusak)
 ```
 
 ## API Endpoints
@@ -172,6 +207,12 @@ The UI is in Indonesian (Bahasa Indonesia):
 
 ## Notes
 
-- TypeScript strict mode errors are currently bypassed in `next.config.ts`
-- Some UI components (chart, resizable) are temporarily removed
-- Admin section uses separate authentication flow
+- `vitest` **sudah jalan** sejak 2026-08-23 (jsdom dipasang sebagai devDependency). `npx vitest run`
+  dan `npx tsc --noEmit` dua-duanya gerbang otomatis.
+- **Lockfile FE regenerate HANYA dengan `npm@11`** (salin package.json ke folder kosong →
+  `npx npm@11 install` → salin lock balik). `npm@10 install` menulis lock yang ditolak `npm ci`
+  sendiri (`ajv@6 does not satisfy ajv@8`) dan `docker build` gagal di langkah `npm ci`.
+- **`vite` dipin `7.3.6`.** Vite 8 (rolldown) gagal meresolusi `@import "tailwindcss"` Tailwind v4:
+  `[postcss] ENOENT: open '/app/tailwindcss'`. Jangan lepas pin tanpa `docker build` sampai selesai.
+- Repo belum git. Cadangan pra-migrasi: `/Users/macbookpro/Sarana/disabilitasku-nextjs-SNAPSHOT-2026-08-09`.
+- Admin memakai alur autentikasi terpisah.

@@ -1,15 +1,17 @@
-'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
+import { qk } from '@/lib/query/keys';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, CheckCircle, Phone, Globe, Mail, Loader2, Clock, ArrowRight, Wifi, Home, Building2, ShieldCheck, Lock } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 import { useToast } from '@/hooks/use-toast';
+import { env } from '@/lib/env';
 
 const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
@@ -47,21 +49,56 @@ interface TherapyLocationFinderProps {
   previewLimit?: number;
 }
 
+interface LocationPage {
+  items: TherapyLocation[];
+  total: number;
+}
+
+/**
+ * Endpoint publik ini tidak tersedia di `apiClient` (butuh header Authorization
+ * opsional untuk contact gating), jadi fetch-nya tetap manual di dalam queryFn.
+ */
+async function fetchLocationPage(params: {
+  offset: number;
+  limit: number;
+  search: string;
+  type: string;
+  method: string;
+  bpjs: boolean;
+}): Promise<LocationPage> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set('search', params.search);
+  if (params.type !== 'all') qs.set('type', params.type);
+  if (params.method !== 'all') qs.set('method', params.method);
+  if (params.bpjs) qs.set('bpjs', 'true');
+  qs.set('limit', String(params.limit));
+  qs.set('offset', String(params.offset));
+
+  const baseUrl = env.apiBaseUrl;
+  const tokenKey = env.authTokenKey;
+  const token = typeof window !== 'undefined' ? localStorage.getItem(tokenKey) : null;
+  const res = await fetch(`${baseUrl}/public/therapists?${qs.toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) throw new Error('Gagal memuat data lokasi');
+  const json = await res.json();
+
+  return {
+    items: Array.isArray(json.data) ? (json.data as TherapyLocation[]) : [],
+    total: json.meta?.total ?? 0,
+  };
+}
+
 const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}) => {
   const isPreview = previewLimit !== undefined;
-  const router = useRouter();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedMethod, setSelectedMethod] = useState('all');
   const [bpjsOnly, setBpjsOnly] = useState(false);
-  const [locations, setLocations] = useState<TherapyLocation[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const { toast } = useToast();
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const fetchRef = useRef({ search: '', type: 'all', method: 'all', bpjs: false });
 
   const locationTypes = [
     { value: 'yayasan', label: 'Yayasan' },
@@ -72,64 +109,61 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
     { value: 'lainnya', label: 'Lainnya' },
   ];
 
-  const hasMore = locations.length < total;
-
-  const fetchLocations = useCallback(async (currentOffset: number, search: string, type: string, method: string, bpjs: boolean, append: boolean) => {
-    if (append) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const qs = new URLSearchParams();
-      if (search) qs.set('search', search);
-      if (type !== 'all') qs.set('type', type);
-      if (method !== 'all') qs.set('method', method);
-      if (bpjs) qs.set('bpjs', 'true');
-      qs.set('limit', String(isPreview ? (previewLimit ?? PAGE_SIZE) : PAGE_SIZE));
-      qs.set('offset', String(currentOffset));
-
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-      const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
-      const token = typeof window !== 'undefined' ? localStorage.getItem(tokenKey) : null;
-      const res = await fetch(`${baseUrl}/public/therapists?${qs.toString()}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      const json = await res.json();
-
-      const data = Array.isArray(json.data) ? json.data as TherapyLocation[] : [];
-      const metaTotal = json.meta?.total ?? 0;
-
-      if (append) {
-        setLocations((prev) => [...prev, ...data]);
-      } else {
-        setLocations(data);
-      }
-      setTotal(metaTotal);
-      setOffset(currentOffset + data.length);
-    } catch (error) {
-      console.error('Error fetching locations:', error);
-      toast({
-        title: "Error",
-        description: "Gagal memuat data lokasi",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [toast, isPreview, previewLimit]);
-
-  // Initial fetch + reset when search/type/method/bpjs changes (debounced)
+  // Ketikan pencarian ditahan 400ms supaya tiap huruf tidak jadi satu request.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchRef.current = { search: searchTerm, type: selectedType, method: selectedMethod, bpjs: bpjsOnly };
-      setOffset(0);
-      fetchLocations(0, searchTerm, selectedType, selectedMethod, bpjsOnly, false);
-    }, 400);
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 400);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, selectedType, selectedMethod, bpjsOnly, fetchLocations]);
+  }, [searchTerm]);
+
+  const pageSize = isPreview ? previewLimit ?? PAGE_SIZE : PAGE_SIZE;
+
+  const {
+    data,
+    isPending: loading,
+    isFetchingNextPage: loadingMore,
+    hasNextPage,
+    fetchNextPage,
+    isError,
+  } = useInfiniteQuery({
+    queryKey: qk.therapists.list({
+      search: debouncedSearch,
+      type: selectedType,
+      method: selectedMethod,
+      bpjs: bpjsOnly,
+      limit: pageSize,
+    }),
+    queryFn: ({ pageParam }) =>
+      fetchLocationPage({
+        offset: pageParam,
+        limit: pageSize,
+        search: debouncedSearch,
+        type: selectedType,
+        method: selectedMethod,
+        bpjs: bpjsOnly,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, p) => n + p.items.length, 0);
+      // Halaman kosong = berhenti, supaya tidak memanggil offset yang sama terus.
+      if (lastPage.items.length === 0 || loaded >= lastPage.total) return undefined;
+      return loaded;
+    },
+    // Ganti filter tidak mengosongkan layar; filter yang pernah dibuka kembali instan.
+    placeholderData: keepPreviousData,
+  });
+
+  const locations = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+  const total = data?.pages[0]?.total ?? 0;
+  const hasMore = !!hasNextPage;
+
+  useEffect(() => {
+    if (!isError) return;
+    toast({
+      title: 'Error',
+      description: 'Gagal memuat data lokasi',
+      variant: 'destructive',
+    });
+  }, [isError, toast]);
 
   // Infinite scroll — hanya aktif di mode full (bukan preview)
   useEffect(() => {
@@ -140,8 +174,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          const { search, type, method, bpjs } = fetchRef.current;
-          fetchLocations(offset, search, type, method, bpjs, true);
+          fetchNextPage();
         }
       },
       { rootMargin: '200px' }
@@ -149,7 +182,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [isPreview, hasMore, loading, loadingMore, offset, fetchLocations]);
+  }, [isPreview, hasMore, loading, loadingMore, fetchNextPage]);
 
   const locationCards = (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -186,16 +219,16 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
             {loc.contact_locked ? (
               <>
                 <div className="flex items-start text-sm text-gray-600">
-                  <MapPin size={16} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" aria-hidden="true" />
+                  <MapPin size={16} className="mr-2 mt-0.5 text-gray-500 flex-shrink-0" aria-hidden="true" />
                   <span>{loc.city_name || 'Lokasi tersedia setelah daftar'}</span>
                 </div>
-                <Link href="/auth" className="flex items-center text-sm text-primary hover:underline">
+                <Link to="/auth" className="flex items-center text-sm text-primary hover:underline">
                   <Lock size={14} className="mr-2 flex-shrink-0" aria-hidden="true" />
                   <span>Daftar gratis untuk lihat alamat &amp; kontak</span>
                 </Link>
                 {loc.website && (
                   <div className="flex items-center text-sm text-gray-600">
-                    <Globe size={14} className="mr-2 text-gray-400" aria-hidden="true" />
+                    <Globe size={14} className="mr-2 text-gray-500" aria-hidden="true" />
                     <a href={loc.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
                       {loc.website.replace(/^https?:\/\//, '')}
                     </a>
@@ -205,7 +238,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
             ) : (
             <>
             <div className="flex items-start text-sm text-gray-600">
-              <MapPin size={16} className="mr-2 mt-0.5 text-gray-400 flex-shrink-0" aria-hidden="true" />
+              <MapPin size={16} className="mr-2 mt-0.5 text-gray-500 flex-shrink-0" aria-hidden="true" />
               <span>{loc.address}{loc.city_name ? `, ${loc.city_name}` : ''}</span>
             </div>
 
@@ -213,19 +246,19 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
               <div className="space-y-2 text-sm text-gray-600">
                 {loc.phone && (
                   <div className="flex items-center">
-                    <Phone size={14} className="mr-2 text-gray-400" aria-hidden="true" />
+                    <Phone size={14} className="mr-2 text-gray-500" aria-hidden="true" />
                     <span>{loc.phone}</span>
                   </div>
                 )}
                 {loc.email && (
                   <div className="flex items-center">
-                    <Mail size={14} className="mr-2 text-gray-400" aria-hidden="true" />
+                    <Mail size={14} className="mr-2 text-gray-500" aria-hidden="true" />
                     <span>{loc.email}</span>
                   </div>
                 )}
                 {loc.website && (
                   <div className="flex items-center">
-                    <Globe size={14} className="mr-2 text-gray-400" aria-hidden="true" />
+                    <Globe size={14} className="mr-2 text-gray-500" aria-hidden="true" />
                     <a href={loc.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
                       {loc.website.replace(/^https?:\/\//, '')}
                     </a>
@@ -261,7 +294,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
             {loc.open_hours && loc.open_hours.length > 0 && (
               <div className="text-sm">
                 <div className="flex items-center text-gray-700 mb-1">
-                  <Clock size={14} className="mr-1.5 text-gray-400" aria-hidden="true" />
+                  <Clock size={14} className="mr-1.5 text-gray-500" aria-hidden="true" />
                   <span className="font-medium">Jam Buka:</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs text-gray-600">
@@ -282,7 +315,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
                 variant="outline"
                 className="w-full border-primary text-primary hover:bg-primary/5 focus:ring-2 focus:ring-primary"
                 aria-label={`Lihat detail ${loc.name}`}
-                onClick={() => router.push(`/lokasi-terapi/${loc.id}`)}
+                onClick={() => navigate({ to: `/lokasi-terapi/${loc.id}` })}
               >
                 <MapPin size={16} className="mr-2" />
                 Lihat Detail
@@ -381,7 +414,7 @@ const TherapyLocationFinder = ({ previewLimit }: TherapyLocationFinderProps = {}
                 <div className="text-center pt-4">
                   <Button
                     size="lg"
-                    onClick={() => router.push('/terapis')}
+                    onClick={() => navigate({ to: '/terapis' })}
                     className="bg-primary hover:bg-primary/90 text-white px-10 rounded-full shadow-md shadow-primary/20"
                   >
                     Lihat Semua {total > 0 && `${total.toLocaleString('id-ID')}+`} Lokasi Terapi

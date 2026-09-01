@@ -1,8 +1,10 @@
-'use client';
 
 import React, { useState, useEffect } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import type { Notification, NotificationCreate, NotificationType, NotificationPriority } from '@/lib/api/types';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
+import type { NotificationCreate, NotificationType, NotificationPriority } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,11 +46,10 @@ const PRIORITY_OPTIONS: { value: NotificationPriority; label: string }[] = [
 ];
 
 const NotificationManager = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [filterType, setFilterType] = useState<string>('all');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Form state for creating notification
   const [formData, setFormData] = useState<NotificationCreate>({
@@ -59,36 +60,75 @@ const NotificationManager = () => {
     user_id: '',
   });
 
+  const listParams: { type?: string; limit: number } = { limit: 100 };
+  if (filterType !== 'all') listParams.type = filterType;
+
+  const { data: notifications = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.notifications.list(listParams),
+    queryFn: () => unwrap(apiClient.adminNotifications.list(listParams)),
+    placeholderData: keepPreviousData,
+  });
+
   useEffect(() => {
-    fetchNotifications();
-  }, [filterType]);
+    if (!listError) return;
+    console.error('Error fetching notifications:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data notifikasi",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
-  const fetchNotifications = async () => {
-    try {
-      const params: { type?: string; limit: number } = { limit: 100 };
-      if (filterType !== 'all') {
-        params.type = filterType;
-      }
-      const response = await apiClient.adminNotifications.list(params);
+  const invalidateNotifications = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.notifications.lists() });
 
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      setNotifications(response.data || []);
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
+  const { mutate: createNotification } = useMutation({
+    mutationFn: (data: NotificationCreate) => unwrap(apiClient.adminNotifications.create(data)),
+    onSuccess: () => {
+      toast({
+        title: "Berhasil",
+        description: "Notifikasi berhasil dibuat",
+      });
+      setDialogOpen(false);
+      setFormData({
+        type: 'system',
+        title: '',
+        message: '',
+        priority: 'medium',
+        user_id: '',
+      });
+      invalidateNotifications();
+    },
+    onError: (error) => {
+      console.error('Error creating notification:', error);
       toast({
         title: "Error",
-        description: "Gagal mengambil data notifikasi",
+        description: "Gagal membuat notifikasi",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  const handleCreate = async () => {
+  const { mutate: removeNotification } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminNotifications.delete(id)),
+    onSuccess: () => {
+      toast({
+        title: "Berhasil",
+        description: "Notifikasi berhasil dihapus",
+      });
+      invalidateNotifications();
+    },
+    onError: (error) => {
+      console.error('Error deleting notification:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menghapus notifikasi",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCreate = () => {
     if (!formData.title || !formData.message) {
       toast({
         title: "Error",
@@ -98,67 +138,22 @@ const NotificationManager = () => {
       return;
     }
 
-    try {
-      const data: NotificationCreate = {
-        type: formData.type,
-        title: formData.title,
-        message: formData.message,
-        priority: formData.priority,
-      };
-      if (formData.user_id) {
-        data.user_id = formData.user_id;
-      }
-
-      const response = await apiClient.adminNotifications.create(data);
-
-      if (response.error) throw new Error(response.error);
-
-      toast({
-        title: "Berhasil",
-        description: "Notifikasi berhasil dibuat",
-      });
-
-      setDialogOpen(false);
-      setFormData({
-        type: 'system',
-        title: '',
-        message: '',
-        priority: 'medium',
-        user_id: '',
-      });
-      fetchNotifications();
-    } catch (error) {
-      console.error('Error creating notification:', error);
-      toast({
-        title: "Error",
-        description: "Gagal membuat notifikasi",
-        variant: "destructive",
-      });
+    const data: NotificationCreate = {
+      type: formData.type,
+      title: formData.title,
+      message: formData.message,
+      priority: formData.priority,
+    };
+    if (formData.user_id) {
+      data.user_id = formData.user_id;
     }
+
+    createNotification(data);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm('Apakah Anda yakin ingin menghapus notifikasi ini?')) return;
-
-    try {
-      const response = await apiClient.adminNotifications.delete(id);
-
-      if (response.error) throw new Error(response.error);
-
-      toast({
-        title: "Berhasil",
-        description: "Notifikasi berhasil dihapus",
-      });
-
-      fetchNotifications();
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-      toast({
-        title: "Error",
-        description: "Gagal menghapus notifikasi",
-        variant: "destructive",
-      });
-    }
+    removeNotification(id);
   };
 
   const getTypeIcon = (type: string) => {

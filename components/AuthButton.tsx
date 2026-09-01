@@ -1,14 +1,13 @@
-'use client';
 
 
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from '@tanstack/react-router';
 import { LogOut, User } from 'lucide-react';
 
 const AuthButton = () => {
   const { user, signOut } = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   if (user) {
     return (
@@ -31,7 +30,7 @@ const AuthButton = () => {
 
   return (
     <Button
-      onClick={() => router.push('/auth')}
+      onClick={() => navigate({ to: '/auth' })}
       className="bg-green-600 hover:bg-green-700 flex items-center gap-1"
     >
       <User size={16} />

@@ -1,0 +1,1 @@
+import{j as a,O as t}from"./index-aW8G_VO-.js";import{B as r}from"./JsonLd-CXn28Nzo.js";function e(){return a.jsxs(a.Fragment,{children:[a.jsx(r,{items:[{name:"Beranda",url:"https://disabilitasku.id"},{name:"Acara",url:"https://disabilitasku.id/acara"}]}),a.jsx(t,{})]})}export{e as component};

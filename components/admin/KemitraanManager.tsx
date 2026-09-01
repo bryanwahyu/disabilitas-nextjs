@@ -1,7 +1,9 @@
-'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { ContactMessage } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,70 +51,78 @@ function parsePartnershipInfo(message: ContactMessage) {
 }
 
 const KemitraanManager = () => {
-  const [allMessages, setAllMessages] = useState<ContactMessage[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [replyNote, setReplyNote] = useState('');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchMessages = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.adminContacts.list({ limit: 500 });
-      if (response.error) throw new Error(response.error);
-      const data = (response.data || []).filter(
-        (m: ContactMessage) => m.subject?.includes('[Kemitraan')
-      );
-      setAllMessages(data);
-    } catch (error) {
-      console.error('Error fetching kemitraan:', error);
-      toast({ title: 'Error', description: 'Gagal mengambil data kemitraan', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  // Kemitraan belum punya endpoint sendiri — masih disaring dari pesan kontak.
+  const listParams = { limit: 500 };
+  const { data: contacts = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.contacts.list(listParams),
+    queryFn: () => unwrap(apiClient.adminContacts.list(listParams)),
+  });
 
-  useEffect(() => { fetchMessages(); }, [fetchMessages]);
+  const allMessages = contacts.filter((m: ContactMessage) => m.subject?.includes('[Kemitraan'));
 
-  const handleViewMessage = async (message: ContactMessage) => {
-    try {
-      const response = await apiClient.adminContacts.get(message.id);
-      if (response.data) {
-        setSelectedMessage(response.data);
-        setReplyNote(response.data.reply_note || '');
-        setDialogOpen(true);
-        fetchMessages();
-      }
-    } catch (error) {
+  useEffect(() => {
+    if (!listError) return;
+    console.error('Error fetching kemitraan:', listError);
+    toast({ title: 'Error', description: 'Gagal mengambil data kemitraan', variant: 'destructive' });
+  }, [listError, toast]);
+
+  const invalidateContacts = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.contacts.lists() });
+
+  // GET detail menandai pesan terbaca di server, jadi diperlakukan sebagai mutation.
+  const { mutate: openMessage } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminContacts.get(id)),
+    onSuccess: (data) => {
+      if (!data) return;
+      setSelectedMessage(data);
+      setReplyNote(data.reply_note || '');
+      setDialogOpen(true);
+      invalidateContacts();
+    },
+    onError: (error) => {
       console.error('Error:', error);
-    }
-  };
+    },
+  });
 
-  const handleUpdateStatus = async (id: string, status: string) => {
-    try {
-      const res = await apiClient.adminContacts.update(id, { status, reply_note: replyNote || undefined });
-      if (res.error) throw new Error(res.error);
+  const { mutate: updateStatus } = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      unwrap(apiClient.adminContacts.update(id, { status, reply_note: replyNote || undefined })),
+    onSuccess: (_data, { status }) => {
       toast({ title: 'Berhasil', description: `Status diperbarui ke ${status === 'replied' ? 'Sudah Dibalas' : 'Sudah Dibaca'}` });
       setDialogOpen(false);
-      fetchMessages();
-    } catch (error) {
+      invalidateContacts();
+    },
+    onError: () => {
       toast({ title: 'Error', description: 'Gagal mengubah status', variant: 'destructive' });
-    }
-  };
+    },
+  });
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Hapus proposal kemitraan ini?')) return;
-    try {
-      const res = await apiClient.adminContacts.delete(id);
-      if (res.error) throw new Error(res.error);
+  const { mutate: removeMessage } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminContacts.delete(id)),
+    onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Proposal dihapus' });
-      fetchMessages();
-    } catch (error) {
+      invalidateContacts();
+    },
+    onError: () => {
       toast({ title: 'Error', description: 'Gagal menghapus', variant: 'destructive' });
-    }
+    },
+  });
+
+  const handleViewMessage = (message: ContactMessage) => openMessage(message.id);
+
+  const handleUpdateStatus = (id: string, status: string) => updateStatus({ id, status });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Hapus proposal kemitraan ini?')) return;
+    removeMessage(id);
   };
 
   const statusCounts = allMessages.reduce<Record<string, number>>((acc, m) => {
@@ -173,7 +183,7 @@ const KemitraanManager = () => {
           </CardTitle>
           <CardDescription>Kelola proposal kemitraan dan CSR yang masuk</CardDescription>
           <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-gray-400" />
+            <Search className="w-4 h-4 text-gray-500" />
             <Input
               placeholder="Cari perusahaan atau kontak..."
               value={searchTerm}

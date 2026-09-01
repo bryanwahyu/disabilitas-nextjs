@@ -1,4 +1,6 @@
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
+import { env } from '@/lib/env';
+
+const BASE = env.apiBaseUrl;
 
 function token() {
   if (typeof window === 'undefined') return '';
@@ -103,16 +105,24 @@ export interface Affiliation {
   created_at: string;
 }
 
+// Appointment mengikuti `internal/domain/appointments/entity.go`.
+//
+// Dulu sebagian field PascalCase karena entity Go-nya belum punya `json` tag.
+// Tag itu sudah dipasang (2026-08-23) sehingga seluruh field kini snake_case,
+// sama dengan endpoint lain. `user_name`/`provider_name` dilengkapi backend di
+// endpoint daftar supaya portal tidak perlu menebak nama dari id.
 export interface Appointment {
-  ID: string;
-  UserID: string;
-  ProviderID: string;
-  StartAt: string;
-  EndAt: string;
-  Status: string;
-  Notes?: string;
-  CancelledReason?: string;
-  CreatedAt: string;
+  id: string;
+  user_id: string;
+  provider_id: string;
+  start_at: string;
+  end_at: string;
+  status: string;
+  notes?: string;
+  cancelled_reason?: string;
+  created_at: string;
+  user_name?: string;
+  provider_name?: string;
 }
 
 export interface Training {

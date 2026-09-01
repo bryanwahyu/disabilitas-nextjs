@@ -1,0 +1,1 @@
+import{j as a,S as n,O as t}from"./index-aW8G_VO-.js";import{B as r}from"./JsonLd-CXn28Nzo.js";function m(){return a.jsxs(a.Fragment,{children:[a.jsx(r,{items:[{name:"Beranda",url:n},{name:"Bantuan",url:`${n}/bantuan`}]}),a.jsx(t,{})]})}export{m as component};

@@ -1,8 +1,10 @@
-'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React from 'react';
+import { Link } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { ArticleSummary } from '@/lib/api/types';
 import { Calendar, User, ArrowRight, Eye } from 'lucide-react';
 
@@ -27,23 +29,13 @@ interface ArticlesSectionProps {
 }
 
 const ArticlesSection = ({ initialArticles }: ArticlesSectionProps = {}) => {
-  const [articles, setArticles] = useState<ArticleSummary[]>(initialArticles || []);
-  const [loading, setLoading] = useState(!initialArticles);
-
-  useEffect(() => {
-    if (initialArticles) return;
-    (async () => {
-      try {
-        const response = await apiClient.publicArticles.list({ limit: 6 });
-        if (response.error) throw new Error(response.error);
-        setArticles(response.data || []);
-      } catch (error) {
-        console.error('Error fetching articles:', error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [initialArticles]);
+  const { data: articles = [], isPending } = useQuery({
+    queryKey: qk.articles.list({ limit: 6, scope: 'beranda' }),
+    queryFn: () => unwrap(apiClient.publicArticles.list({ limit: 6 })),
+    initialData: initialArticles,
+    // Blok beranda: konten jarang berubah, balik ke beranda harus instan dari cache.
+    staleTime: 30 * 60 * 1000,
+  });
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -55,7 +47,7 @@ const ArticlesSection = ({ initialArticles }: ArticlesSectionProps = {}) => {
     });
   };
 
-  if (loading) {
+  if (isPending) {
     return (
       <section className="py-20 bg-gradient-to-b from-white to-purple-50/40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -95,7 +87,7 @@ const ArticlesSection = ({ initialArticles }: ArticlesSectionProps = {}) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Featured card (large) */}
           {featured && (
-            <Link href={`/artikel/${featured.slug}`} className="block">
+            <Link to="/artikel/$slug" params={{ slug: featured.slug }} className="block">
               <div className="article-card h-full flex flex-col">
                 <div className="card-image aspect-[16/10]">
                   {featured.cover_image ? (
@@ -148,7 +140,7 @@ const ArticlesSection = ({ initialArticles }: ArticlesSectionProps = {}) => {
           {/* Right side: stacked cards */}
           <div className="flex flex-col gap-4">
             {rest.map((article) => (
-              <Link key={article.id} href={`/artikel/${article.slug}`} className="block">
+              <Link key={article.id} to="/artikel/$slug" params={{ slug: article.slug }} className="block">
                 <div className="article-card flex flex-row h-full">
                   <div className="card-image w-32 sm:w-40 flex-shrink-0">
                     {article.cover_image ? (
@@ -197,7 +189,7 @@ const ArticlesSection = ({ initialArticles }: ArticlesSectionProps = {}) => {
         {/* CTA */}
         <div className="text-center mt-10">
           <Link
-            href="/artikel"
+            to="/artikel"
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-gradient-to-r from-primary to-purple-700 text-white font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 transition-all duration-300"
           >
             Lihat Semua Artikel

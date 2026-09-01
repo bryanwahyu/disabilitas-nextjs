@@ -1,0 +1,1 @@
+import{p as t,r as e}from"./index-aW8G_VO-.js";function r(){const a=t();return e.useEffect(()=>{a({replace:!0,to:localStorage.getItem("yayasan_token")?"/portal-yayasan/dashboard":"/portal-yayasan/auth"})},[a]),null}export{r as component};

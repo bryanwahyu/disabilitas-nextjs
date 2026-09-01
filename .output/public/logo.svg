@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="DisabilitasKu — Infrastruktur Digital Ekosistem Disabilitas">
+  <title>DisabilitasKu Logo</title>
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#C026D3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon container -->
+  <rect x="40" y="60" width="240" height="240" rx="52" fill="url(#brandGrad)"/>
+
+  <!-- Heart figure (scaled from 100x100 base to 240x240, offset by 40,60) -->
+  <g transform="translate(40 60) scale(2.4)" fill="#FFFFFF">
+    <!-- Head -->
+    <circle cx="50" cy="28" r="11"/>
+    <!-- Heart-shaped torso -->
+    <path d="M50,90 C28,78 16,58 26,46 C34,36 46,42 50,52 C54,42 66,36 74,46 C84,58 72,78 50,90 Z"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="320" y="200" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="92" letter-spacing="-2" fill="#0F172A">Disabilitas<tspan fill="#7C3AED">Ku</tspan></text>
+  <text x="324" y="248" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-weight="400" font-size="26" fill="#6B7280">Infrastruktur Digital Ekosistem Disabilitas</text>
+</svg>

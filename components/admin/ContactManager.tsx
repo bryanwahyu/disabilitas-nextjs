@@ -1,8 +1,10 @@
-'use client';
 
 
 import React, { useState, useEffect } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { ContactMessage } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,105 +28,94 @@ import {
 } from '@/components/ui/select';
 
 const ContactManager = () => {
-  const [messages, setMessages] = useState<ContactMessage[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [replyNote, setReplyNote] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const listParams: { status?: string; limit: number } = { limit: 100 };
+  if (filterStatus !== 'all') listParams.status = filterStatus;
+
+  const { data: messages = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.contacts.list(listParams),
+    queryFn: () => unwrap(apiClient.adminContacts.list(listParams)),
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
-    fetchMessages();
-  }, [filterStatus]);
+    if (!listError) return;
+    console.error('Error fetching messages:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data pesan",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
-  const fetchMessages = async () => {
-    try {
-      const params: { status?: string; limit: number } = { limit: 100 };
-      if (filterStatus !== 'all') {
-        params.status = filterStatus;
-      }
-      const response = await apiClient.adminContacts.list(params);
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      setMessages(response.data || []);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      toast({
-        title: "Error",
-        description: "Gagal mengambil data pesan",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleViewMessage = async (message: ContactMessage) => {
-    try {
-      const response = await apiClient.adminContacts.get(message.id);
-      if (response.data) {
-        setSelectedMessage(response.data);
-        setReplyNote(response.data.reply_note || '');
-        setDialogOpen(true);
-        fetchMessages(); // Refresh to update status
-      }
-    } catch (error) {
+  // Membuka pesan menandainya terbaca di server, jadi ini mutation walau lewat GET.
+  const { mutate: openMessage } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminContacts.get(id)),
+    onSuccess: (data) => {
+      if (!data) return;
+      setSelectedMessage(data);
+      setReplyNote(data.reply_note || '');
+      setDialogOpen(true);
+      queryClient.invalidateQueries({ queryKey: qk.admin.contacts.lists() });
+    },
+    onError: (error) => {
       console.error('Error fetching message:', error);
-    }
-  };
+    },
+  });
 
-  const handleUpdateStatus = async (id: string, status: string) => {
-    try {
-      const response = await apiClient.adminContacts.update(id, {
-        status,
-        reply_note: replyNote || undefined
-      });
-
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: updateStatus } = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      unwrap(apiClient.adminContacts.update(id, { status, reply_note: replyNote || undefined })),
+    onSuccess: (_data, { status }) => {
       toast({
         title: "Berhasil",
         description: `Status pesan berhasil diubah ke ${status}`,
       });
-
       setDialogOpen(false);
-      fetchMessages();
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: qk.admin.contacts.lists() });
+    },
+    onError: (error) => {
       console.error('Error updating status:', error);
       toast({
         title: "Error",
         description: "Gagal mengubah status pesan",
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus pesan ini?')) return;
-
-    try {
-      const response = await apiClient.adminContacts.delete(id);
-
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: deleteMessage } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminContacts.delete(id)),
+    onSuccess: () => {
       toast({
         title: "Berhasil",
         description: "Pesan berhasil dihapus",
       });
-
-      fetchMessages();
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: qk.admin.contacts.lists() });
+    },
+    onError: (error) => {
       console.error('Error deleting message:', error);
       toast({
         title: "Error",
         description: "Gagal menghapus pesan",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleViewMessage = (message: ContactMessage) => openMessage(message.id);
+
+  const handleUpdateStatus = (id: string, status: string) => updateStatus({ id, status });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus pesan ini?')) return;
+    deleteMessage(id);
   };
 
   const getStatusBadge = (status: string) => {

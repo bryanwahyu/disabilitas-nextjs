@@ -1,0 +1,1 @@
+import{j as a,S as t,O as e}from"./index-aW8G_VO-.js";import{B as n}from"./JsonLd-CXn28Nzo.js";function m(){return a.jsxs(a.Fragment,{children:[a.jsx(n,{items:[{name:"Beranda",url:t},{name:"Pelatihan",url:`${t}/pelatihan`}]}),a.jsx(e,{})]})}export{m as component};

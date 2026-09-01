@@ -1,5 +1,15 @@
 import type {
   ApiResponse,
+  TherapyProgram,
+  TherapyProgramDetail,
+  TherapyProgramListItem,
+  TherapyProgramInput,
+  TherapyProgramCreateResult,
+  TherapyProgramQuote,
+  TherapyProgramPayResult,
+  TherapyGoal,
+  TherapyEvaluation,
+  TherapyNextStep,
   User,
   Session,
   AuthResponse,
@@ -8,6 +18,10 @@ import type {
   Therapist,
   Appointment,
   AppointmentInsert,
+  AppointmentWithParties,
+  Holiday,
+  Review,
+  ReviewSummary,
   AppointmentUpdate,
   Profile,
   ProfileUpdate,
@@ -59,6 +73,20 @@ import type {
   TrainingSummary,
   TrainingDetail,
   TrainingRegistration,
+  Book,
+  Complaint,
+  GamePublic,
+  GameAdmin,
+  GameSession,
+  Campaign,
+  Donation,
+  Consultation,
+  ConsultationDetail,
+  ConsultationCreateResult,
+  ConsultationIntakeInput,
+  ConsultationQueueItem,
+  ConsultationPartner,
+  PartnerCandidate,
   TrainingMaterial,
   ScheduleDetail,
   AvailableSlot,
@@ -72,11 +100,20 @@ import type {
   ChildMilestone,
   ChildMilestoneInput,
   ProgressMonthlySummary,
+  KPSPSet,
+  MilestoneSet,
+  Assessment,
+  KPSPSubmitInput,
+  ClinicalAssessmentInput,
+  DenverForm,
+  DenverOutcome,
+  DenverSubmitInput,
   ContentReport,
   ContentReportWithContext,
   PriceItem,
   CommissionReport,
 } from './types';
+import { env } from '@/lib/env';
 
 /** Shape returned by the /me endpoint (PascalCase or snake_case from Go backend) */
 interface RawMeResponse {
@@ -213,18 +250,43 @@ interface AuthErrorResult {
   status?: number;
 }
 
+/**
+ * Hasil error untuk makeRequest/fetchUrl.
+ *
+ * CATATAN TIPE (utang teknis yang sengaja dilokalisir):
+ * `ApiResponse<T>` mendeklarasikan `data: T`, padahal SEMUA jalur gagal
+ * (HTTP != 2xx, timeout, network error) mengembalikan `data: null`. Jadi tipe
+ * `data` di response error itu bohong terhadap runtime.
+ *
+ * Perbaikan yang benar adalah `data: T | null` di `lib/api/types.ts`, tapi itu
+ * memaksa ratusan call site melakukan null-check. Selama itu belum dikerjakan,
+ * kebohongan tipe ini dikurung di satu helper ini saja supaya mudah dicari dan
+ * dihapus nanti.
+ *
+ * KONSEKUENSI UNTUK PEMANGGIL: `response.data` TIDAK boleh dipakai sebelum
+ * `response.error` dicek. Kalau `error` terisi, `data` pasti `null` walau
+ * tipenya bilang `T`.
+ */
+function errorResponse<T>(error: string, status?: number): ApiResponse<T> {
+  return {
+    data: null as unknown as T,
+    error,
+    ...(status !== undefined && { status }),
+  };
+}
+
 class ApiClient {
   private baseUrl: string;
   private timeout: number;
   private authToken: string | null = null;
 
   constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8082/v1';
-    this.timeout = parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT || '10000');
+    this.baseUrl = env.apiBaseUrl;
+    this.timeout = env.apiTimeoutMs;
 
     // Load existing token from localStorage (client-side only)
     if (typeof window !== 'undefined') {
-      const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+      const tokenKey = env.authTokenKey;
       this.authToken = localStorage.getItem(tokenKey);
     }
   }
@@ -263,7 +325,7 @@ class ApiClient {
           this.removeAuthToken();
         }
 
-        return { data: null, error: errorData.error || errorData.message || response.statusText, status: response.status };
+        return errorResponse<T>(errorData.error || errorData.message || response.statusText, response.status);
       }
 
       const data = await response.json();
@@ -271,11 +333,11 @@ class ApiClient {
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          return { data: null, error: 'Request timeout' };
+          return errorResponse<T>('Request timeout');
         }
-        return { data: null, error: error.message };
+        return errorResponse<T>(error.message);
       }
-      return { data: null, error: 'Unknown error occurred' };
+      return errorResponse<T>('Unknown error occurred');
     }
   }
 
@@ -311,7 +373,7 @@ class ApiClient {
           this.removeAuthToken();
         }
 
-        return { data: null as unknown as T, error: errorData.error || errorData.message || response.statusText, status: response.status };
+        return errorResponse<T>(errorData.error || errorData.message || response.statusText, response.status);
       }
 
       const data = await response.json();
@@ -319,11 +381,11 @@ class ApiClient {
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          return { data: null as unknown as T, error: 'Request timeout' };
+          return errorResponse<T>('Request timeout');
         }
-        return { data: null as unknown as T, error: error.message };
+        return errorResponse<T>(error.message);
       }
-      return { data: null as unknown as T, error: 'Unknown error occurred' };
+      return errorResponse<T>('Unknown error occurred');
     }
   }
 
@@ -464,6 +526,33 @@ class ApiClient {
 
   // Public endpoints
   public = {
+    // Panduan tumbuh kembang publik (non-diagnostik, tanpa login).
+    tumbuhKembang: {
+      // Tanpa ageMonth → daftar interval usia; dengan ageMonth → set milestone.
+      milestones: async (ageMonth?: number) => {
+        const suffix = ageMonth && ageMonth > 0 ? `?age_month=${ageMonth}` : '';
+        return await this.makeRequest<MilestoneSet | { ages: number[] }>(
+          `/public/tumbuh-kembang/milestones${suffix}`
+        );
+      },
+    },
+    // Denver II publik: coba tanpa login. Worksheet + skoring tanpa disimpan.
+    denver: {
+      // Tanpa ageMonth → daftar interval usia; dengan ageMonth → worksheet Denver.
+      questions: async (ageMonth?: number) => {
+        const suffix = ageMonth && ageMonth > 0 ? `?age_month=${ageMonth}` : '';
+        return await this.makeRequest<DenverForm | { ages: number[] }>(
+          `/public/denver/questions${suffix}`
+        );
+      },
+      // Hitung hasil skrining tanpa menyimpan (untuk pengunjung/guest).
+      screen: async (data: DenverSubmitInput) => {
+        return await this.makeRequest<DenverOutcome>(`/public/denver/screen`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
+      },
+    },
     therapists: {
       list: async (params: {
         search?: string;
@@ -597,6 +686,48 @@ class ApiClient {
         return await this.makeRequest<TrainingDetail>(`/public/trainings/${id}`);
       }
     },
+    books: {
+      list: async (params: { q?: string; category?: string; disability_type?: string; limit?: number; offset?: number } = {}) => {
+        const qs = new URLSearchParams();
+        if (params.q) qs.set('q', params.q);
+        if (params.category) qs.set('category', params.category);
+        if (params.disability_type) qs.set('disability_type', params.disability_type);
+        if (params.limit) qs.set('limit', String(params.limit));
+        if (params.offset) qs.set('offset', String(params.offset));
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        return await this.makeRequest<Book[]>(`/public/books${suffix}`);
+      },
+      get: async (id: string) => {
+        return await this.makeRequest<Book>(`/public/books/${id}`);
+      }
+    },
+    games: {
+      list: async (params: { q?: string; type?: string; disability_type?: string; limit?: number; offset?: number } = {}) => {
+        const qs = new URLSearchParams();
+        if (params.q) qs.set('q', params.q);
+        if (params.type) qs.set('type', params.type);
+        if (params.disability_type) qs.set('disability_type', params.disability_type);
+        if (params.limit) qs.set('limit', String(params.limit));
+        if (params.offset) qs.set('offset', String(params.offset));
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        return await this.makeRequest<GamePublic[]>(`/public/games${suffix}`);
+      },
+      get: async (id: string) => {
+        return await this.makeRequest<GamePublic>(`/public/games/${id}`);
+      }
+    },
+    campaigns: {
+      list: async (params: { limit?: number; offset?: number } = {}) => {
+        const qs = new URLSearchParams();
+        if (params.limit) qs.set('limit', String(params.limit));
+        if (params.offset) qs.set('offset', String(params.offset));
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        return await this.makeRequest<Campaign[]>(`/public/campaigns${suffix}`);
+      },
+      get: async (idOrSlug: string) => {
+        return await this.makeRequest<Campaign>(`/public/campaigns/${idOrSlug}`);
+      },
+    },
     recommendations: {
       locations: async (params: { lat?: number; lng?: number; limit?: number } = {}) => {
         const qs = new URLSearchParams();
@@ -607,6 +738,281 @@ class ApiClient {
         return await this.makeRequest<RecommendedLocation[]>(`/public/recommendations/locations${suffix}`);
       }
     }
+  };
+
+  // Generic presigned S3 upload (authenticated)
+  uploads = {
+    presign: async (data: { folder: string; file_name: string; content_type: string; file_size: number }) => {
+      return await this.makeRequest<{ upload_url: string; s3_key: string; folder: string; file_name: string; content_type: string; expires_in: number }>('/me/uploads/presign', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    // Upload a File to S3 via presign, returns the stored s3_key.
+    uploadFile: async (folder: string, file: File): Promise<{ s3_key?: string; error?: string }> => {
+      const presigned = await this.uploads.presign({
+        folder,
+        file_name: file.name,
+        content_type: file.type || 'application/octet-stream',
+        file_size: file.size,
+      });
+      if (presigned.error || !presigned.data) {
+        return { error: presigned.error || 'presign gagal' };
+      }
+      try {
+        const put = await fetch(presigned.data.upload_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': presigned.data.content_type },
+          body: file,
+        });
+        if (!put.ok) return { error: `upload gagal (${put.status})` };
+        return { s3_key: presigned.data.s3_key };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : 'upload gagal' };
+      }
+    },
+    download: async (key: string) => {
+      const qs = new URLSearchParams({ key });
+      return await this.makeRequest<{ download_url: string; s3_key: string; expires_in: number }>(`/uploads/download?${qs.toString()}`);
+    },
+  };
+
+  // Games API methods (authenticated)
+  games = {
+    validateLocation: async (id: string, coords: { lat: number; lng: number }) => {
+      return await this.makeRequest<{ valid: boolean; distance_m: number; radius_m?: number; required: boolean }>(`/games/${id}/validate-location`, {
+        method: 'POST',
+        body: JSON.stringify(coords),
+      });
+    },
+    submit: async (id: string, data: { answers: number[]; lat?: number; lng?: number }) => {
+      return await this.makeRequest<{ score: number; max_score: number; location_valid: boolean; session_id: string }>(`/games/${id}/submit`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    mySessions: async () => {
+      return await this.makeRequest<GameSession[]>('/me/game-sessions');
+    },
+  };
+
+  adminGames = {
+    list: async (params: { q?: string; type?: string; status?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.type) qs.set('type', params.type);
+      if (params.status) qs.set('status', params.status);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<GameAdmin[]>(`/admin/games/${suffix}`);
+    },
+    get: async (id: string) => {
+      return await this.makeRequest<GameAdmin>(`/admin/games/${id}`);
+    },
+    create: async (data: Record<string, unknown>) => {
+      return await this.makeRequest<GameAdmin>('/admin/games/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (id: string, data: Record<string, unknown>) => {
+      return await this.makeRequest<GameAdmin>(`/admin/games/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (id: string) => {
+      return await this.makeRequest<void>(`/admin/games/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  // Donasi (authenticated)
+  donations = {
+    create: async (data: { campaign_id: string; amount: number; anonymous?: boolean }) => {
+      return await this.makeRequest<{ donation_id: string; payment_ref: string; redirect_url: string; provider: string }>(
+        '/donations',
+        { method: 'POST', body: JSON.stringify(data) },
+      );
+    },
+    my: async () => {
+      return await this.makeRequest<Donation[]>('/me/donations');
+    },
+    mockPay: async (id: string) => {
+      return await this.makeRequest<{ status: string }>(`/donations/${id}/mock-pay`, { method: 'POST' });
+    },
+  };
+
+  /**
+   * Terapi berjalan: paket sesi yang dibayar sekali di aplikasi, lalu sesinya
+   * terbit otomatis di jadwal terapis. Sesi programnya tetap appointment biasa,
+   * jadi jurnal & kehadiran memakai endpoint appointment yang sudah ada.
+   */
+  programs = {
+    /** Harga paket sebelum order dibuat — untuk menampilkan total di form. */
+    quote: async (providerId: string, totalSessions: number) => {
+      return await this.makeRequest<TherapyProgramQuote>(
+        `/programs/quote?provider_id=${encodeURIComponent(providerId)}&total_sessions=${totalSessions}`,
+      );
+    },
+
+    /** Membuat paket + menerbitkan tagihan. Sesi baru dijadwalkan setelah lunas. */
+    create: async (data: TherapyProgramInput) => {
+      return await this.makeRequest<TherapyProgramCreateResult>('/me/programs', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /** Program milik pemesan (orang tua / pengguna). */
+    list: async () => {
+      return await this.makeRequest<TherapyProgramListItem[]>('/me/programs');
+    },
+
+    /** Program yang ditangani terapis/yayasan yang sedang login. */
+    listForTherapist: async () => {
+      return await this.makeRequest<TherapyProgramListItem[]>('/me/therapy-programs');
+    },
+
+    get: async (id: string) => {
+      return await this.makeRequest<TherapyProgramDetail>(`/me/programs/${id}`);
+    },
+
+    cancel: async (id: string) => {
+      return await this.makeRequest<{ status: string }>(`/me/programs/${id}/cancel`, { method: 'POST' });
+    },
+
+    /** Simulasi pelunasan; hanya hidup saat gateway masih mode mock. */
+    mockPay: async (id: string) => {
+      return await this.makeRequest<TherapyProgramPayResult>(`/me/programs/${id}/mock-pay`, { method: 'POST' });
+    },
+
+    // --- Sisi terapis ---
+
+    addGoal: async (programId: string, data: { title: string; baseline?: string; target?: string }) => {
+      return await this.makeRequest<TherapyGoal>(`/me/programs/${programId}/goals`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateGoal: async (
+      programId: string,
+      goalId: string,
+      data: { status?: TherapyGoal['status']; title?: string; target?: string; achieved_note?: string; achieved_at?: string },
+    ) => {
+      return await this.makeRequest<TherapyGoal>(`/me/programs/${programId}/goals/${goalId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    addEvaluation: async (
+      programId: string,
+      data: { period?: string; summary: string; recommendation?: string; next_step?: TherapyNextStep },
+    ) => {
+      return await this.makeRequest<TherapyEvaluation>(`/me/programs/${programId}/evaluations`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+  };
+
+  // Konsultasi screening berbayar (authenticated)
+  consultations = {
+    create: async (data: ConsultationIntakeInput) => {
+      return await this.makeRequest<ConsultationCreateResult>('/me/consultations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    list: async () => {
+      return await this.makeRequest<Consultation[]>('/me/consultations');
+    },
+    get: async (id: string) => {
+      return await this.makeRequest<ConsultationDetail>(`/me/consultations/${id}`);
+    },
+    cancel: async (id: string) => {
+      return await this.makeRequest<{ status: string }>(`/me/consultations/${id}/cancel`, { method: 'POST' });
+    },
+    mockPay: async (id: string) => {
+      return await this.makeRequest<{ status: string }>(`/me/consultations/${id}/mock-pay`, { method: 'POST' });
+    },
+    // Antrian mitra (akun role therapy Kitty Center)
+    providerIntake: async (status = 'paid') => {
+      return await this.makeRequest<ConsultationQueueItem[]>(
+        `/me/consultations/intake?status=${encodeURIComponent(status)}`,
+      );
+    },
+  };
+
+  // Admin: akun mitra tujuan konsultasi (bisa diganti tanpa redeploy)
+  adminConsultations = {
+    partner: async () => {
+      return await this.makeRequest<ConsultationPartner>('/admin/consultations/partner');
+    },
+    setPartner: async (providerId: string) => {
+      return await this.makeRequest<ConsultationPartner>('/admin/consultations/partner', {
+        method: 'PUT',
+        body: JSON.stringify({ provider_id: providerId }),
+      });
+    },
+    partnerCandidates: async () => {
+      return await this.makeRequest<PartnerCandidate[]>('/admin/consultations/partner-candidates');
+    },
+  };
+
+  adminCampaigns = {
+    list: async (params: { status?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set('status', params.status);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<Campaign[]>(`/admin/campaigns/${suffix}`);
+    },
+    create: async (data: Record<string, unknown>) => {
+      return await this.makeRequest<Campaign>('/admin/campaigns/', { method: 'POST', body: JSON.stringify(data) });
+    },
+    update: async (id: string, data: Record<string, unknown>) => {
+      return await this.makeRequest<Campaign>(`/admin/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    },
+    delete: async (id: string) => {
+      return await this.makeRequest<void>(`/admin/campaigns/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  adminDonations = {
+    list: async (params: { campaign_id?: string; status?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.campaign_id) qs.set('campaign_id', params.campaign_id);
+      if (params.status) qs.set('status', params.status);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<Donation[]>(`/admin/donations${suffix}`);
+    },
+  };
+
+  // Complaints API methods (authenticated)
+  complaints = {
+    create: async (data: { category?: string; subject: string; message: string; attachments?: string[] }) => {
+      return await this.makeRequest<Complaint>('/complaints', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    myList: async (params: { status?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set('status', params.status);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<Complaint[]>(`/me/complaints${suffix}`);
+    },
+    get: async (id: string) => {
+      return await this.makeRequest<Complaint>(`/complaints/${id}`);
+    },
   };
 
   // Location API methods
@@ -869,6 +1275,50 @@ class ApiClient {
   };
 
   // Admin pricing & commission methods (markup admin)
+  /**
+   * Hari libur nasional.
+   *
+   * Endpoint-nya sudah lama ada dan mesin ketersediaan slot memang
+   * memperhitungkan tabel ini, tapi tidak ada satu pun pembungkus di klien —
+   * halaman admin "libur" karenanya stub, dan daftar liburnya hanya bisa diisi
+   * lewat query langsung ke database.
+   */
+  holidays = {
+    list: async (year?: string) => {
+      const suffix = year ? `?year=${encodeURIComponent(year)}` : '';
+      return await this.makeRequest<Holiday[]>(`/holidays${suffix}`);
+    },
+    create: async (date: string, name: string) => {
+      return await this.makeRequest<Holiday>('/admin/holidays', {
+        method: 'POST',
+        body: JSON.stringify({ date, name }),
+      });
+    },
+    remove: async (id: string) => {
+      return await this.makeRequest<void>(`/admin/holidays/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  /**
+   * Ulasan publik.
+   *
+   * Backend-nya lengkap sejak lama, tapi klien ini nol method reviews — jadi
+   * halaman terapis tidak pernah bisa menampilkan rating, dan calon klien
+   * menilai terapis tanpa satu pun sinyal dari keluarga lain.
+   */
+  reviews = {
+    summary: async (targetId: string, type = 'therapist') => {
+      return await this.makeRequest<ReviewSummary>(
+        `/reviews/${targetId}/summary?type=${encodeURIComponent(type)}`
+      );
+    },
+    list: async (targetId: string, type = 'therapist', limit = 20) => {
+      return await this.makeRequest<Review[]>(
+        `/reviews/${targetId}?type=${encodeURIComponent(type)}&limit=${limit}`
+      );
+    },
+  };
+
   adminPricing = {
     listPrices: async (status?: string) => {
       const suffix = status ? `?status=${encodeURIComponent(status)}` : '';
@@ -886,13 +1336,20 @@ class ApiClient {
         body: JSON.stringify({ admin_note }),
       });
     },
-    commissions: async (params: { yayasan_id?: string; from?: string; to?: string } = {}) => {
+    commissions: async (params: { yayasan_id?: string; from?: string; to?: string; status?: string } = {}) => {
       const qs = new URLSearchParams();
       if (params.yayasan_id) qs.set('yayasan_id', params.yayasan_id);
       if (params.from) qs.set('from', params.from);
       if (params.to) qs.set('to', params.to);
+      if (params.status) qs.set('status', params.status);
       const suffix = qs.toString() ? `?${qs.toString()}` : '';
       return await this.makeRequest<CommissionReport>(`/admin/commissions${suffix}`);
+    },
+    settleCommissions: async (ids: string[], external_ref?: string) => {
+      return await this.makeRequest<{ settled: number }>(`/admin/commissions/settle`, {
+        method: 'POST',
+        body: JSON.stringify({ ids, external_ref }),
+      });
     },
   };
 
@@ -966,6 +1423,61 @@ class ApiClient {
     },
   };
 
+  adminBooks = {
+    list: async (params: { q?: string; status?: string; category?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.status) qs.set('status', params.status);
+      if (params.category) qs.set('category', params.category);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<Book[]>(`/admin/books/${suffix}`);
+    },
+    get: async (id: string) => {
+      return await this.makeRequest<Book>(`/admin/books/${id}`);
+    },
+    create: async (data: Record<string, unknown>) => {
+      return await this.makeRequest<Book>('/admin/books/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (id: string, data: Record<string, unknown>) => {
+      return await this.makeRequest<Book>(`/admin/books/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (id: string) => {
+      return await this.makeRequest<void>(`/admin/books/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  adminComplaints = {
+    list: async (params: { status?: string; category?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set('status', params.status);
+      if (params.category) qs.set('category', params.category);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return await this.makeRequest<Complaint[]>(`/admin/complaints/${suffix}`);
+    },
+    get: async (id: string) => {
+      return await this.makeRequest<Complaint>(`/admin/complaints/${id}`);
+    },
+    update: async (id: string, data: { status?: string; admin_reply?: string }) => {
+      return await this.makeRequest<Complaint>(`/admin/complaints/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (id: string) => {
+      return await this.makeRequest<void>(`/admin/complaints/${id}`, { method: 'DELETE' });
+    },
+  };
+
   // User methods
   users = {
     get: async (id: string) => {
@@ -1013,7 +1525,7 @@ class ApiClient {
     },
 
     list: async () => {
-      return await this.makeRequest<Appointment[]>('/appointments');
+      return await this.makeRequest<AppointmentWithParties[]>('/appointments');
     },
 
     create: async (data: AppointmentInsert) => {
@@ -1037,11 +1549,11 @@ class ApiClient {
     },
 
     getUserAppointments: async (userId: string) => {
-      return await this.makeRequest<Appointment[]>(`/users/${userId}/appointments`);
+      return await this.makeRequest<AppointmentWithParties[]>(`/users/${userId}/appointments`);
     },
 
     getTherapistAppointments: async (therapistId: string) => {
-      return await this.makeRequest<Appointment[]>(`/therapists/${therapistId}/appointments`);
+      return await this.makeRequest<AppointmentWithParties[]>(`/therapists/${therapistId}/appointments`);
     }
   };
 
@@ -1102,6 +1614,53 @@ class ApiClient {
     // Therapist side: record a session note on an appointment
     createSessionNote: async (appointmentId: string, data: SessionNoteInput) => {
       return await this.makeRequest<SessionNote>(`/appointments/${appointmentId}/session-note`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // --- Penilaian perkembangan (KPSP + klinis) ---
+
+    // KPSP questionnaire for a given age in months (nearest interval).
+    kpspQuestions: async (ageMonth: number) => {
+      return await this.makeRequest<KPSPSet>(`/kpsp/questions?age_month=${ageMonth}`);
+    },
+
+    // Parent submits a KPSP self-screening for their child.
+    submitKPSP: async (childId: string, data: KPSPSubmitInput) => {
+      return await this.makeRequest<Assessment>(`/me/children/${childId}/assessments/kpsp`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // Denver II worksheet for a given age (public endpoint; works logged-in too).
+    denverQuestions: async (ageMonth: number) => {
+      return await this.makeRequest<DenverForm>(`/public/denver/questions?age_month=${ageMonth}`);
+    },
+
+    // Parent submits & SAVES a Denver II screening for their child (butuh login).
+    submitDenver: async (childId: string, data: DenverSubmitInput) => {
+      return await this.makeRequest<Assessment>(`/me/children/${childId}/assessments/denver`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // List a child's assessments (parent view). Optional type filter.
+    assessments: async (childId: string, type?: 'kpsp' | 'denver' | 'clinical') => {
+      const q = type ? `?type=${type}` : '';
+      return await this.makeRequest<Assessment[]>(`/me/children/${childId}/assessments${q}`);
+    },
+
+    // Chronological assessments of a type for charting.
+    assessmentTrend: async (childId: string, type: 'kpsp' | 'denver' | 'clinical' = 'kpsp') => {
+      return await this.makeRequest<Assessment[]>(`/me/children/${childId}/assessments/trend?type=${type}`);
+    },
+
+    // Therapist side: record a per-domain clinical assessment on an appointment.
+    createClinicalAssessment: async (appointmentId: string, data: ClinicalAssessmentInput) => {
+      return await this.makeRequest<Assessment>(`/appointments/${appointmentId}/assessments/clinical`, {
         method: 'POST',
         body: JSON.stringify(data),
       });
@@ -1286,10 +1845,11 @@ class ApiClient {
 
   // Events methods
   events = {
-    list: async (params: { limit?: number; offset?: number } = {}) => {
+    list: async (params: { limit?: number; offset?: number; community_id?: string } = {}) => {
       const qs = new URLSearchParams();
       if (params.limit) qs.set('limit', String(params.limit));
       if (params.offset) qs.set('offset', String(params.offset));
+      if (params.community_id) qs.set('community_id', params.community_id);
       const suffix = qs.toString() ? `?${qs.toString()}` : '';
       const response = await this.makeRequest<RawEvent[]>(`/events${suffix}`);
       if (response.data && Array.isArray(response.data)) {
@@ -1638,6 +2198,12 @@ class ApiClient {
   };
 
   // Shortcuts for backward compatibility
+  get publicTumbuhKembang() {
+    return {
+      milestones: this.public.tumbuhKembang.milestones,
+    };
+  }
+
   get publicArticles() {
     return {
       list: this.public.articles.list,
@@ -1657,14 +2223,6 @@ class ApiClient {
     return {
       list: this.public.trainings.list,
       get: this.public.trainings.get,
-    };
-  }
-
-  get publicResources() {
-    return {
-      list: this.public.resources.list,
-      get: this.public.resources.get,
-      categories: this.public.resources.getCategories
     };
   }
 
@@ -1859,19 +2417,19 @@ class ApiClient {
 
   private setAuthToken(token: string) {
     this.authToken = token;
-    const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+    const tokenKey = env.authTokenKey;
     localStorage.setItem(tokenKey, token);
   }
 
   private removeAuthToken() {
     this.authToken = null;
-    const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+    const tokenKey = env.authTokenKey;
     localStorage.removeItem(tokenKey);
   }
 
   private clearAllTokens() {
     this.authToken = null;
-    const tokenKey = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'auth_token';
+    const tokenKey = env.authTokenKey;
 
     // Remove all possible auth-related keys
     localStorage.removeItem(tokenKey);

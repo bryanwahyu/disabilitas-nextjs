@@ -1,10 +1,11 @@
-'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Search, MapPin, Heart, Shield, Sparkles, Users } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api/client';
+import { ArrowRight, Heart, Shield, Sparkles, Users } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { qk } from '@/lib/query/keys';
+import { env } from '@/lib/env';
 
 // Animated counter hook
 function useAnimatedCount(target: number, duration = 1500) {
@@ -50,32 +51,35 @@ interface HeroSectionProps {
   initialStats?: HeroStats;
 }
 
-const HeroSection = ({ initialStats }: HeroSectionProps = {}) => {
-  const router = useRouter();
-  const [stats, setStats] = useState<HeroStats>(initialStats || { users: 0, therapy: 0, articles: 0, forum: 0, communities: 0 });
+const EMPTY_STATS: HeroStats = { users: 0, therapy: 0, articles: 0, forum: 0, communities: 0 };
 
-  useEffect(() => {
-    if (initialStats) return;
-    const fetchStats = async () => {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || '/api'}/public/stats`);
-        if (res.ok) {
-          const json = await res.json();
-          const d = json.data ?? {};
-          setStats({
-            users: d.users ?? 0,
-            therapy: d.locations ?? 0,
-            articles: d.articles ?? 0,
-            forum: d.threads ?? 0,
-            communities: d.communities ?? 0,
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      }
-    };
-    fetchStats();
-  }, [initialStats]);
+// Endpoint agregat publik ini tidak ada di apiClient (tanpa auth, bentuk respons
+// berbeda), jadi fetch-nya tetap manual — hanya dipindah ke dalam queryFn.
+async function fetchHeroStats(): Promise<HeroStats> {
+  const res = await fetch(`${env.apiBaseUrl}/public/stats`);
+  if (!res.ok) throw new Error('Gagal memuat statistik');
+  const json = await res.json();
+  const d = json.data ?? {};
+  return {
+    users: d.users ?? 0,
+    therapy: d.locations ?? 0,
+    articles: d.articles ?? 0,
+    forum: d.threads ?? 0,
+    communities: d.communities ?? 0,
+  };
+}
+
+const HeroSection = ({ initialStats }: HeroSectionProps = {}) => {
+  const navigate = useNavigate();
+
+  const { data: stats = EMPTY_STATS } = useQuery({
+    queryKey: qk.reports.of('public-stats'),
+    queryFn: fetchHeroStats,
+    // Hasil SSR dipakai apa adanya; tanpa SSR baru fetch di klien.
+    initialData: initialStats,
+    // Angka agregat berubah sangat lambat — jangan bikin request tiap balik ke beranda.
+    staleTime: 30 * 60 * 1000,
+  });
 
   const usersCounter = useAnimatedCount(stats.users);
   const therapyCounter = useAnimatedCount(stats.therapy);
@@ -92,59 +96,36 @@ const HeroSection = ({ initialStats }: HeroSectionProps = {}) => {
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-16 lg:pt-20 lg:pb-24">
         {/* Main content */}
         <div className="text-center max-w-4xl mx-auto mb-12">
-          {/* Badge */}
+          {/* Badge kolaborasi */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-amber-500/10 border border-primary/15 mb-6">
             <Sparkles className="w-4 h-4 text-amber-500" />
-            <span className="text-sm font-medium text-gray-700">Dibuat oleh Penyandang Disabilitas, untuk Komunitas Kita</span>
+            <span className="text-sm font-medium text-gray-700">Kerja sama dengan Kitty Center</span>
+          </div>
+
+          {/* Co-brand wordmark — ganti dengan logo Kitty Center saat aset tersedia */}
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-5 text-gray-800">
+            <span className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight">DisabilitasKu</span>
+            <span className="text-gray-300 text-xl sm:text-2xl font-light">×</span>
+            <span className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight">Kitty Center</span>
           </div>
 
           {/* Headline */}
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-[1.15] mb-5">
-            Untuk Keluarga yang
+            Kolaborasi untuk Tumbuh Kembang
             <span className="block bg-gradient-to-r from-primary via-purple-600 to-pink-500 bg-clip-text text-transparent">
-              Tidak Tahu Harus Mulai dari Mana
+              Anak yang Lebih Mandiri
             </span>
           </h1>
 
           <p className="text-lg md:text-xl text-gray-500 max-w-2xl mx-auto mb-8">
-            DisabilitasKu dibangun oleh <strong className="text-gray-700">Bryan Wahyu Kresna Putra</strong> — penyandang Cerebral Palsy yang memahami langsung. Temukan <strong className="text-gray-700">6.000+ lokasi terapi</strong>, komunitas aktif, dan informasi terpercaya. Semuanya gratis.
+            <strong className="text-gray-700">DisabilitasKu</strong> bersama <strong className="text-gray-700">Kitty Center</strong> menghadirkan skrining tumbuh kembang, terapis terpercaya, dan komunitas pendukung dalam satu tempat. Dibangun oleh penyandang Cerebral Palsy yang memahami langsung. Semuanya gratis.
           </p>
-
-          {/* Search bar — prominent, Zocdoc-style */}
-          <div className="max-w-2xl mx-auto mb-10">
-            <div
-              className="flex flex-col sm:flex-row gap-2 p-2 bg-white rounded-2xl shadow-xl shadow-primary/8 border border-gray-100 cursor-pointer"
-              onClick={() => {
-                document.getElementById('layanan')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              <div className="flex items-center gap-3 flex-1 px-4 py-3 rounded-xl bg-gray-50/80">
-                <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                <span className="text-gray-600 text-left">Cari terapi, klinik, atau layanan...</span>
-              </div>
-              <div className="flex items-center gap-3 flex-1 px-4 py-3 rounded-xl bg-gray-50/80 sm:border-l border-gray-200">
-                <MapPin className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                <span className="text-gray-600 text-left">Jakarta, Bandung, Surabaya...</span>
-              </div>
-              <Button
-                size="lg"
-                className="bg-gradient-to-r from-primary to-purple-700 hover:from-primary/90 hover:to-purple-700/90 text-white px-8 h-12 rounded-xl font-semibold shadow-lg shadow-primary/25"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  document.getElementById('layanan')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                Cari
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
-          </div>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
             <Button
               size="lg"
-              onClick={() => router.push('/auth')}
+              onClick={() => navigate({ to: '/auth' })}
               className="bg-gradient-to-r from-primary to-purple-700 text-white px-8 h-13 text-base font-semibold rounded-full shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 transition-all duration-300"
             >
               Bergabung Gratis

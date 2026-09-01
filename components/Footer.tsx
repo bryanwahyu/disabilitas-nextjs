@@ -1,9 +1,7 @@
-'use client';
 
 
 import { Facebook, Instagram, Mail, Phone, MapPin, Linkedin } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 
 const TikTokIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -21,14 +19,15 @@ const Footer = () => {
       { name: 'Syarat & Ketentuan', href: '/syarat-ketentuan' }
     ],
     layanan: [
-      { name: 'Cari Lokasi Terapi', href: '/layanan' },
-      { name: 'Konsultasi Online', href: '/layanan' },
+      { name: 'Skrining Tumbuh Kembang', href: '/tumbuh-kembang' },
+      { name: 'Terapis', href: '/terapis' },
       { name: 'Forum Komunitas', href: '/forum' },
       { name: 'Event & Workshop', href: '/acara' }
     ],
     dukungan: [
       { name: 'Pusat Bantuan', href: '/bantuan' },
       { name: 'FAQ', href: '/faq' },
+      { name: 'Layanan Keluhan', href: '/keluhan' },
       { name: 'Feedback', href: '/feedback' },
       { name: 'Kontak Support', href: 'mailto:bryanwahyukp95@gmail.com' }
     ],
@@ -46,8 +45,10 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
           {/* Brand Section */}
           <div className="lg:col-span-1">
-            <Link href="/" className="flex items-center mb-4">
-              <Image
+            <Link to="/" className="flex items-center mb-4">
+              <img
+                loading="lazy"
+                decoding="async"
                 src="/icon-dark.svg"
                 alt="DisabilitasKu logo"
                 width={40}
@@ -92,7 +93,7 @@ const Footer = () => {
               {footerLinks.platform.map((link) => (
                 <li key={link.name}>
                   <Link
-                    href={link.href}
+                    to={link.href}
                     className="text-gray-300 hover:text-primary transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
                   >
                     {link.name}
@@ -109,7 +110,7 @@ const Footer = () => {
               {footerLinks.layanan.map((link) => (
                 <li key={link.name}>
                   <Link
-                    href={link.href}
+                    to={link.href}
                     className="text-gray-300 hover:text-primary transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
                   >
                     {link.name}
@@ -134,7 +135,7 @@ const Footer = () => {
                     </a>
                   ) : (
                     <Link
-                      href={link.href}
+                      to={link.href}
                       className="text-gray-300 hover:text-primary transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
                     >
                       {link.name}
@@ -152,7 +153,7 @@ const Footer = () => {
               {footerLinks.aksesibilitas.map((link) => (
                 <li key={link.name}>
                   <Link
-                    href={link.href}
+                    to={link.href}
                     className="text-gray-300 hover:text-primary transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
                   >
                     {link.name}
@@ -249,21 +250,21 @@ const Footer = () => {
         {/* Bottom Section */}
         <div className="border-t border-gray-800 mt-8 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="text-gray-400 text-sm mb-4 md:mb-0">
+            <div className="text-gray-500 text-sm mb-4 md:mb-0">
               © 2026 DisabilitasKu. Semua hak cipta dilindungi.
             </div>
 
             {/* WCAG Compliance Badge */}
             <div className="flex items-center space-x-4">
-              <div className="flex items-center text-sm text-gray-400">
+              <div className="flex items-center text-sm text-gray-500">
                 <div className="bg-primary text-white px-2 py-1 rounded text-xs font-semibold mr-2">
                   WCAG 2.1 AA
                 </div>
                 <span>Compliant</span>
               </div>
-              <div className="text-sm text-gray-400">
+              <div className="text-sm text-gray-500">
                 <Link
-                  href="/aksesibilitas"
+                  to="/aksesibilitas"
                   className="hover:text-primary transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-gray-900 rounded"
                 >
                   Laporan Aksesibilitas

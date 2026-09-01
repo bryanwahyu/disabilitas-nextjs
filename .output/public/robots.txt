@@ -1,0 +1,18 @@
+# Dari app/robots.ts (Next). Statis sekarang: isinya tidak pernah bergantung
+# data, jadi tidak perlu dihitung ulang tiap request.
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /profil/
+Disallow: /dashboard/
+Disallow: /reset-password/
+Disallow: /auth
+Disallow: /jadwal/
+Disallow: /feedback/
+Disallow: /*?q=*
+Disallow: /*?search=*
+Disallow: /*?page=*
+Disallow: /api/
+
+Host: https://disabilitasku.id
+Sitemap: https://disabilitasku.id/sitemap.xml

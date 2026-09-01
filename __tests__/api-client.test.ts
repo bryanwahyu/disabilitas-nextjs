@@ -13,9 +13,11 @@ const localStorageMock = (() => {
 
 Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
-// Set env before importing
-process.env.NEXT_PUBLIC_API_BASE_URL = 'http://localhost:8082/v1';
-process.env.NEXT_PUBLIC_API_TIMEOUT = '5000';
+// Set env before importing. `lib/env.ts` membaca `import.meta.env.VITE_*`
+// (di-inline Vite saat build), bukan `process.env.NEXT_PUBLIC_*` — stub lama
+// tidak dibaca siapa pun sejak migrasi TanStack.
+vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8082/v1');
+vi.stubEnv('VITE_API_TIMEOUT', '5000');
 
 describe('ApiClient', () => {
   let apiClient: any;

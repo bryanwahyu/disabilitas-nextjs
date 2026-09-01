@@ -1,7 +1,9 @@
-'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { ForumThread, ForumComment } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,133 +47,133 @@ import {
 } from 'lucide-react';
 
 const ForumManager = () => {
-  const [threads, setThreads] = useState<ForumThread[]>([]);
-  const [replies, setReplies] = useState<ForumComment[]>([]);
-  const [stats, setStats] = useState({ total_threads: 0, total_replies: 0 });
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('threads');
 
   // Detail dialog
-  const [selectedThread, setSelectedThread] = useState<(ForumThread & { comments?: ForumComment[] }) | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'thread' | 'reply'; id: string; title?: string } | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const statsQuery = useQuery({
+    queryKey: qk.admin.forum.of('stats'),
+    queryFn: () => unwrap(apiClient.adminForum.getStats()),
+  });
+
+  const threadsParams = { limit: 100 };
+  const threadsQuery = useQuery({
+    queryKey: qk.admin.forum.list({ resource: 'threads', ...threadsParams }),
+    queryFn: () => unwrap(apiClient.adminForum.listThreads(threadsParams)),
+  });
+
+  const repliesParams = { limit: 100 };
+  const repliesQuery = useQuery({
+    queryKey: qk.admin.forum.list({ resource: 'replies', ...repliesParams }),
+    queryFn: () => unwrap(apiClient.adminForum.listReplies(repliesParams)),
+  });
+
+  const stats = statsQuery.data ?? { total_threads: 0, total_replies: 0 };
+  const threads: ForumThread[] = Array.isArray(threadsQuery.data) ? threadsQuery.data : [];
+  const replies: ForumComment[] = Array.isArray(repliesQuery.data) ? repliesQuery.data : [];
+  const loading = statsQuery.isPending || threadsQuery.isPending || repliesQuery.isPending;
+
+  const listError = statsQuery.error || threadsQuery.error || repliesQuery.error;
+  useEffect(() => {
+    if (!listError) return;
+    console.error('Error fetching forum data:', listError);
+    toast({
+      title: 'Error',
+      description: 'Gagal mengambil data forum',
+      variant: 'destructive',
+    });
+  }, [listError, toast]);
+
+  const detailQuery = useQuery({
+    queryKey: qk.admin.forum.detail(selectedThreadId ?? ''),
+    queryFn: () => unwrap(apiClient.adminForum.getThread(selectedThreadId!)),
+    enabled: !!selectedThreadId,
+  });
+
+  const selectedThread = (detailQuery.data ?? null) as (ForumThread & { comments?: ForumComment[] }) | null;
+  const detailLoading = !!selectedThreadId && detailQuery.isPending;
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!detailQuery.error) return;
+    console.error('Error fetching thread detail:', detailQuery.error);
+    toast({
+      title: 'Error',
+      description: 'Gagal mengambil detail thread',
+      variant: 'destructive',
+    });
+  }, [detailQuery.error, toast]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [statsRes, threadsRes, repliesRes] = await Promise.all([
-        apiClient.adminForum.getStats(),
-        apiClient.adminForum.listThreads({ limit: 100 }),
-        apiClient.adminForum.listReplies({ limit: 100 }),
-      ]);
-
-      if (statsRes.data) setStats(statsRes.data);
-      if (threadsRes.data) setThreads(Array.isArray(threadsRes.data) ? threadsRes.data : []);
-      if (repliesRes.data) setReplies(Array.isArray(repliesRes.data) ? repliesRes.data : []);
-    } catch (error) {
-      console.error('Error fetching forum data:', error);
-      toast({
-        title: 'Error',
-        description: 'Gagal mengambil data forum',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
+  const refreshForum = () => {
+    queryClient.invalidateQueries({ queryKey: qk.admin.forum.all() });
   };
 
-  const handleViewThread = async (thread: ForumThread) => {
-    setDetailLoading(true);
+  const handleViewThread = (thread: ForumThread) => {
+    setSelectedThreadId(thread.id);
     setDetailDialogOpen(true);
-    try {
-      const response = await apiClient.adminForum.getThread(thread.id);
-      if (response.data) {
-        setSelectedThread(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching thread detail:', error);
-      toast({
-        title: 'Error',
-        description: 'Gagal mengambil detail thread',
-        variant: 'destructive',
-      });
-    } finally {
-      setDetailLoading(false);
-    }
   };
 
-  const handlePinThread = async (thread: ForumThread) => {
-    try {
-      const response = await apiClient.adminForum.updateThread(thread.id, {
-        is_pinned: !thread.is_pinned,
-      });
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
+  const { mutate: togglePin } = useMutation({
+    mutationFn: (thread: ForumThread) =>
+      unwrap(apiClient.adminForum.updateThread(thread.id, { is_pinned: !thread.is_pinned })),
+    onSuccess: (_data, thread) => {
       toast({
         title: 'Berhasil',
         description: thread.is_pinned ? 'Thread berhasil di-unpin' : 'Thread berhasil di-pin',
       });
-
-      fetchData();
-    } catch (error: any) {
+      refreshForum();
+    },
+    onError: (error: any) => {
       toast({
         title: 'Error',
         description: error.message || 'Gagal mengubah status pin',
         variant: 'destructive',
       });
-    }
-  };
+    },
+  });
+
+  const handlePinThread = (thread: ForumThread) => togglePin(thread);
 
   const handleDeleteConfirm = (type: 'thread' | 'reply', id: string, title?: string) => {
     setDeleteTarget({ type, id, title });
     setDeleteDialogOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-
-    setDeleteLoading(true);
-    try {
-      if (deleteTarget.type === 'thread') {
-        const response = await apiClient.adminForum.deleteThread(deleteTarget.id);
-        if (response.error) throw new Error(response.error);
-      } else {
-        const response = await apiClient.adminForum.deleteReply(deleteTarget.id);
-        if (response.error) throw new Error(response.error);
-      }
-
+  const { mutate: removeContent, isPending: deleteLoading } = useMutation({
+    mutationFn: (target: { type: 'thread' | 'reply'; id: string }) =>
+      target.type === 'thread'
+        ? unwrap(apiClient.adminForum.deleteThread(target.id))
+        : unwrap(apiClient.adminForum.deleteReply(target.id)),
+    onSuccess: (_data, target) => {
       toast({
         title: 'Berhasil',
-        description: `${deleteTarget.type === 'thread' ? 'Thread' : 'Balasan'} berhasil dihapus`,
+        description: `${target.type === 'thread' ? 'Thread' : 'Balasan'} berhasil dihapus`,
       });
-
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
-      fetchData();
-    } catch (error: any) {
+      refreshForum();
+    },
+    onError: (error: any) => {
       toast({
         title: 'Error',
         description: error.message || 'Gagal menghapus',
         variant: 'destructive',
       });
-    } finally {
-      setDeleteLoading(false);
-    }
+    },
+  });
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    removeContent(deleteTarget);
   };
 
   const formatDate = (dateStr: string) => {
@@ -301,13 +303,13 @@ const ForumManager = () => {
               <CardTitle>Kelola Forum</CardTitle>
               <CardDescription>Moderasi thread dan balasan forum</CardDescription>
             </div>
-            <Button variant="outline" onClick={fetchData}>
+            <Button variant="outline" onClick={refreshForum}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
           </div>
           <div className="flex items-center space-x-2 mt-4">
-            <Search className="w-4 h-4 text-gray-400" />
+            <Search className="w-4 h-4 text-gray-500" />
             <Input
               placeholder="Cari thread atau balasan..."
               value={searchTerm}

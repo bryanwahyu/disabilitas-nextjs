@@ -1,8 +1,10 @@
-'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { env } from '@/lib/env';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { ContentReportWithContext } from '@/lib/api/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,35 +30,28 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 export default function ReportManager() {
-  const [reports, setReports] = useState<ContentReportWithContext[]>([]);
   const [status, setStatus] = useState('open');
-  const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<ContentReportWithContext | null>(null);
   const [resolveAction, setResolveAction] = useState<'resolved' | 'dismissed'>('resolved');
   const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchReports = async (s = status) => {
-    setLoading(true);
-    try {
-      const response = await apiClient.adminReports.list({ status: s, per_page: 50 });
-      if (response.error) throw new Error(response.error);
-      setReports(response.data || []);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Gagal memuat laporan',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const listParams = { status, per_page: 50 };
+  const { data: reports = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.reports.list(listParams),
+    queryFn: () => unwrap(apiClient.adminReports.list(listParams)),
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
-    fetchReports(status);
-  }, [status]);
+    if (!listError) return;
+    toast({
+      title: 'Error',
+      description: listError instanceof Error ? listError.message : 'Gagal memuat laporan',
+      variant: 'destructive',
+    });
+  }, [listError, toast]);
 
   const openResolve = (report: ContentReportWithContext, action: 'resolved' | 'dismissed') => {
     setResolving(report);
@@ -64,30 +59,29 @@ export default function ReportManager() {
     setNote('');
   };
 
-  const handleResolve = async () => {
-    if (!resolving) return;
-    setSaving(true);
-    try {
-      const response = await apiClient.adminReports.resolve(resolving.id, {
-        status: resolveAction,
-        note: note || undefined,
-      });
-      if (response.error) throw new Error(response.error);
+  const { mutate: resolveReport, isPending: saving } = useMutation({
+    mutationFn: (payload: { id: string; status: 'resolved' | 'dismissed'; note?: string }) =>
+      unwrap(apiClient.adminReports.resolve(payload.id, { status: payload.status, note: payload.note })),
+    onSuccess: (_data, payload) => {
       toast({
         title: 'Berhasil',
-        description: resolveAction === 'resolved' ? 'Laporan ditandai selesai' : 'Laporan diabaikan',
+        description: payload.status === 'resolved' ? 'Laporan ditandai selesai' : 'Laporan diabaikan',
       });
       setResolving(null);
-      fetchReports();
-    } catch (error: any) {
+      queryClient.invalidateQueries({ queryKey: qk.admin.reports.lists() });
+    },
+    onError: (error: any) => {
       toast({
         title: 'Gagal',
         description: error.message || 'Gagal memproses laporan',
         variant: 'destructive',
       });
-    } finally {
-      setSaving(false);
-    }
+    },
+  });
+
+  const handleResolve = () => {
+    if (!resolving) return;
+    resolveReport({ id: resolving.id, status: resolveAction, note: note || undefined });
   };
 
   const statusBadge = (s: string) => {
@@ -144,7 +138,7 @@ export default function ReportManager() {
                     {report.target_type === 'thread' ? 'Diskusi' : 'Balasan'}
                   </Badge>
                   <Badge variant="outline">{REASON_LABELS[report.reason] || report.reason}</Badge>
-                  <span className="text-xs text-gray-400 ml-auto">
+                  <span className="text-xs text-gray-500 ml-auto">
                     {new Date(report.created_at).toLocaleString('id-ID')}
                   </span>
                 </div>
@@ -161,19 +155,23 @@ export default function ReportManager() {
                   <p className="text-xs text-gray-600 mb-2">Catatan moderator: {report.resolution_note}</p>
                 )}
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <Link
+                  {/* Lintas portal: konten ada di situs publik, sedangkan panel
+                      ini dilayani host admin. Router hanya mengenal route portal
+                      sendiri, jadi tautannya harus URL absolut. */}
+                  <a
                     href={
                       report.target_type === 'thread'
-                        ? `/forum/${report.target_id}`
-                        : `/forum`
+                        ? `${env.siteUrl}/forum/${report.target_id}`
+                        : `${env.siteUrl}/forum`
                     }
                     target="_blank"
+                    rel="noopener noreferrer"
                   >
                     <Button variant="outline" size="sm">
                       <ExternalLink className="h-3.5 w-3.5 mr-1" />
                       Lihat Konten
                     </Button>
-                  </Link>
+                  </a>
                   {report.status === 'open' && (
                     <>
                       <Button size="sm" onClick={() => openResolve(report, 'resolved')}>

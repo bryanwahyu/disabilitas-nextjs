@@ -1,6 +1,8 @@
-'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { unwrap, unwrapWithMeta } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { apiClient } from '@/lib/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +23,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { TrainingSummary, TrainingRegistration, TrainingMaterial } from '@/lib/api/types';
+import { DisabilityTypePicker } from '@/components/DisabilityTypePicker';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700 border-gray-300' },
@@ -97,25 +100,17 @@ const EMPTY_FORM = {
 };
 
 const TrainingManager = () => {
-  const [trainings, setTrainings] = useState<TrainingSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [totalTrainings, setTotalTrainings] = useState(0);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState<TrainingSummary | null>(null);
 
   // Registrations panel
   const [regsOpen, setRegsOpen] = useState<string | null>(null);
-  const [registrations, setRegistrations] = useState<TrainingRegistration[]>([]);
-  const [loadingRegs, setLoadingRegs] = useState(false);
 
   // Materials panel
   const [materialsOpen, setMaterialsOpen] = useState<string | null>(null);
-  const [materials, setMaterials] = useState<TrainingMaterial[]>([]);
-  const [loadingMaterials, setLoadingMaterials] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Create / Edit form
@@ -123,28 +118,29 @@ const TrainingManager = () => {
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchTrainings = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params: Record<string, any> = { limit: 200 };
-      if (statusFilter !== 'all') params.status = statusFilter;
-      const response = await apiClient.adminTrainings.list(params);
-      if (response.error) throw new Error(response.error);
-      const data = Array.isArray(response.data) ? response.data : [];
-      setTrainings(data);
-      setTotalTrainings((response as any).meta?.total || data.length);
-    } catch {
-      toast({ title: 'Error', description: 'Gagal mengambil data pelatihan', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, toast]);
+  const listParams: Record<string, any> = { limit: 200 };
+  if (statusFilter !== 'all') listParams.status = statusFilter;
 
-  useEffect(() => { fetchTrainings(); }, [fetchTrainings]);
+  const { data: listResult, isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.trainings.list(listParams),
+    queryFn: () => unwrapWithMeta(apiClient.adminTrainings.list(listParams)),
+    placeholderData: keepPreviousData,
+  });
+
+  const trainings: TrainingSummary[] = Array.isArray(listResult?.data) ? listResult.data : [];
+  const totalTrainings = listResult?.meta?.total || trainings.length;
+
+  useEffect(() => {
+    if (!listError) return;
+    toast({ title: 'Error', description: 'Gagal mengambil data pelatihan', variant: 'destructive' });
+  }, [listError, toast]);
+
+  const invalidateTrainings = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.trainings.lists() });
 
   // CREATE / EDIT
   const openCreate = () => {
@@ -154,13 +150,10 @@ const TrainingManager = () => {
     setFormOpen(true);
   };
 
-  const openEdit = async (training: TrainingSummary) => {
-    setFormMode('edit');
-    setEditingId(training.id);
-    try {
-      const res = await apiClient.adminTrainings.get(training.id);
-      if (res.error) throw new Error(res.error);
-      const d = res.data as any;
+  const { mutate: loadTrainingForEdit } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminTrainings.get(id)),
+    onSuccess: (data) => {
+      const d = data as any;
       setForm({
         title: d.title || '',
         description: d.description || '',
@@ -183,56 +176,61 @@ const TrainingManager = () => {
         status: d.status || 'published',
       });
       setFormOpen(true);
-    } catch (error: any) {
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal memuat data pelatihan', variant: 'destructive' });
-    }
+    },
+  });
+
+  const openEdit = (training: TrainingSummary) => {
+    setFormMode('edit');
+    setEditingId(training.id);
+    loadTrainingForEdit(training.id);
   };
 
-  const handleSave = async () => {
+  const { mutate: saveTraining, isPending: saving } = useMutation({
+    mutationFn: ({ id, payload }: { id: string | null; payload: Record<string, unknown> }) =>
+      id
+        ? unwrap(apiClient.adminTrainings.update(id, payload))
+        : unwrap(apiClient.adminTrainings.create(payload)),
+    onSuccess: (_data, { id }) => {
+      toast({ title: 'Berhasil', description: id ? 'Pelatihan berhasil diperbarui' : 'Pelatihan berhasil ditambahkan' });
+      setFormOpen(false);
+      invalidateTrainings();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Gagal menyimpan', variant: 'destructive' });
+    },
+  });
+
+  const handleSave = () => {
     if (!form.title || !form.description || !form.organizer_name || !form.start_date) {
       toast({ title: 'Validasi', description: 'Judul, deskripsi, penyelenggara, dan tanggal mulai wajib diisi', variant: 'destructive' });
       return;
     }
-    setSaving(true);
-    try {
-      const payload: Record<string, unknown> = {
-        title: form.title,
-        description: form.description,
-        organizer_name: form.organizer_name,
-        category: form.category,
-        training_type: form.training_type,
-        skill_level: form.skill_level,
-        start_date: form.start_date,
-        status: form.status,
-        certificate: form.certificate,
-        price_currency: form.price_currency || 'IDR',
-      };
-      if (form.organizer_logo) payload.organizer_logo = form.organizer_logo;
-      if (form.organizer_website) payload.organizer_website = form.organizer_website;
-      if (form.location) payload.location = form.location;
-      if (form.training_url) payload.training_url = form.training_url;
-      if (form.end_date) payload.end_date = form.end_date;
-      if (form.schedule_info) payload.schedule_info = form.schedule_info;
-      if (form.max_participants) payload.max_participants = parseInt(form.max_participants);
-      if (form.price) payload.price = parseInt(form.price);
-      if (form.disability_types) payload.disability_types = form.disability_types;
+    const payload: Record<string, unknown> = {
+      title: form.title,
+      description: form.description,
+      organizer_name: form.organizer_name,
+      category: form.category,
+      training_type: form.training_type,
+      skill_level: form.skill_level,
+      start_date: form.start_date,
+      status: form.status,
+      certificate: form.certificate,
+      price_currency: form.price_currency || 'IDR',
+    };
+    if (form.organizer_logo) payload.organizer_logo = form.organizer_logo;
+    if (form.organizer_website) payload.organizer_website = form.organizer_website;
+    if (form.location) payload.location = form.location;
+    if (form.training_url) payload.training_url = form.training_url;
+    if (form.end_date) payload.end_date = form.end_date;
+    if (form.schedule_info) payload.schedule_info = form.schedule_info;
+    if (form.max_participants) payload.max_participants = parseInt(form.max_participants);
+    if (form.price) payload.price = parseInt(form.price);
+    if (form.disability_types) payload.disability_types = form.disability_types;
 
-      let res;
-      if (formMode === 'create') {
-        res = await apiClient.adminTrainings.create(payload);
-      } else {
-        res = await apiClient.adminTrainings.update(editingId!, payload);
-      }
-      if (res.error) throw new Error(res.error);
-
-      toast({ title: 'Berhasil', description: formMode === 'create' ? 'Pelatihan berhasil ditambahkan' : 'Pelatihan berhasil diperbarui' });
-      setFormOpen(false);
-      fetchTrainings();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Gagal menyimpan', variant: 'destructive' });
-    } finally {
-      setSaving(false);
-    }
+    saveTraining({ id: formMode === 'create' ? null : editingId, payload });
   };
 
   // DELETE
@@ -241,110 +239,124 @@ const TrainingManager = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!selectedTraining) return;
-    try {
-      const res = await apiClient.adminTrainings.delete(selectedTraining.id);
-      if (res.error) throw new Error(res.error);
+  const { mutate: removeTraining } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminTrainings.delete(id)),
+    onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Pelatihan berhasil dihapus' });
       setDeleteDialogOpen(false);
       setSelectedTraining(null);
-      fetchTrainings();
-    } catch (error: any) {
+      invalidateTrainings();
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal menghapus', variant: 'destructive' });
-    }
+    },
+  });
+
+  const handleDelete = () => {
+    if (!selectedTraining) return;
+    removeTraining(selectedTraining.id);
   };
 
-  const handleApprove = async (t: TrainingSummary) => {
-    try {
-      const res = await apiClient.adminTrainings.approve(t.id);
-      if (res.error) throw new Error(res.error);
+  const { mutate: approveTraining } = useMutation({
+    mutationFn: (t: TrainingSummary) => unwrap(apiClient.adminTrainings.approve(t.id)),
+    onSuccess: (_data, t) => {
       toast({ title: 'Disetujui', description: `"${t.title}" sekarang tayang` });
-      fetchTrainings();
-    } catch (error: any) {
+      invalidateTrainings();
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal menyetujui', variant: 'destructive' });
-    }
-  };
+    },
+  });
 
-  const handleReject = async (t: TrainingSummary) => {
+  const handleApprove = (t: TrainingSummary) => approveTraining(t);
+
+  const { mutate: rejectTraining } = useMutation({
+    mutationFn: ({ t, reason }: { t: TrainingSummary; reason: string }) =>
+      unwrap(apiClient.adminTrainings.reject(t.id, reason)),
+    onSuccess: (_data, { t }) => {
+      toast({ title: 'Ditolak', description: `"${t.title}" dikembalikan ke yayasan` });
+      invalidateTrainings();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Gagal menolak', variant: 'destructive' });
+    },
+  });
+
+  const handleReject = (t: TrainingSummary) => {
     const reason = window.prompt(`Alasan menolak "${t.title}":`);
     if (reason === null) return;
     if (!reason.trim()) {
       toast({ title: 'Error', description: 'Alasan penolakan wajib diisi', variant: 'destructive' });
       return;
     }
-    try {
-      const res = await apiClient.adminTrainings.reject(t.id, reason.trim());
-      if (res.error) throw new Error(res.error);
-      toast({ title: 'Ditolak', description: `"${t.title}" dikembalikan ke yayasan` });
-      fetchTrainings();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Gagal menolak', variant: 'destructive' });
-    }
+    rejectTraining({ t, reason: reason.trim() });
   };
 
   // REGISTRATIONS
-  const toggleRegistrations = async (trainingId: string) => {
-    if (regsOpen === trainingId) {
-      setRegsOpen(null);
-      return;
-    }
-    setRegsOpen(trainingId);
-    setLoadingRegs(true);
-    try {
-      const res = await apiClient.adminTrainings.registrations(trainingId);
-      if (res.error) throw new Error(res.error);
-      setRegistrations(Array.isArray(res.data) ? res.data : []);
-    } catch {
-      toast({ title: 'Error', description: 'Gagal memuat pendaftar', variant: 'destructive' });
-    } finally {
-      setLoadingRegs(false);
-    }
-  };
+  const regsQuery = useQuery({
+    queryKey: qk.admin.trainings.sub(regsOpen ?? '', 'registrations'),
+    queryFn: () => unwrap(apiClient.adminTrainings.registrations(regsOpen!)),
+    enabled: !!regsOpen,
+  });
 
-  const updateRegStatus = async (trainingId: string, regId: string, status: string) => {
-    try {
-      const res = await apiClient.adminTrainings.updateRegistrationStatus(trainingId, regId, status);
-      if (res.error) throw new Error(res.error);
+  const registrations: TrainingRegistration[] = Array.isArray(regsQuery.data) ? regsQuery.data : [];
+  const loadingRegs = !!regsOpen && regsQuery.isPending;
+
+  useEffect(() => {
+    if (!regsQuery.error) return;
+    toast({ title: 'Error', description: 'Gagal memuat pendaftar', variant: 'destructive' });
+  }, [regsQuery.error, toast]);
+
+  const toggleRegistrations = (trainingId: string) =>
+    setRegsOpen((prev) => (prev === trainingId ? null : trainingId));
+
+  const { mutate: setRegStatus } = useMutation({
+    mutationFn: ({ trainingId, regId, status }: { trainingId: string; regId: string; status: string }) =>
+      unwrap(apiClient.adminTrainings.updateRegistrationStatus(trainingId, regId, status)),
+    onSuccess: (_data, { trainingId, status }) => {
       toast({ title: 'Berhasil', description: `Status pendaftar diperbarui ke ${REG_STATUS_CONFIG[status]?.label || status}` });
-      toggleRegistrations(trainingId);
-    } catch (error: any) {
+      // Sebelumnya panel ikut tertutup karena memanggil toggle; sekarang cukup dimuat ulang.
+      queryClient.invalidateQueries({ queryKey: qk.admin.trainings.sub(trainingId, 'registrations') });
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal memperbarui status', variant: 'destructive' });
-    }
-  };
+    },
+  });
+
+  const updateRegStatus = (trainingId: string, regId: string, status: string) =>
+    setRegStatus({ trainingId, regId, status });
 
   // MATERIALS
-  const toggleMaterials = async (trainingId: string) => {
-    if (materialsOpen === trainingId) {
-      setMaterialsOpen(null);
-      return;
-    }
-    setMaterialsOpen(trainingId);
-    setLoadingMaterials(true);
-    try {
-      const res = await apiClient.adminTrainings.listMaterials(trainingId);
-      if (res.error) throw new Error(res.error);
-      setMaterials(Array.isArray(res.data) ? res.data : []);
-    } catch {
-      toast({ title: 'Error', description: 'Gagal memuat materi', variant: 'destructive' });
-    } finally {
-      setLoadingMaterials(false);
-    }
-  };
+  const materialsQuery = useQuery({
+    queryKey: qk.admin.trainings.sub(materialsOpen ?? '', 'materials'),
+    queryFn: () => unwrap(apiClient.adminTrainings.listMaterials(materialsOpen!)),
+    enabled: !!materialsOpen,
+  });
 
-  const handleFileUpload = async (trainingId: string, file: File) => {
-    setUploading(true);
-    try {
-      // Step 1: Get presigned upload URL
-      const presignRes = await apiClient.adminTrainings.presignUpload(trainingId, {
+  const materials: TrainingMaterial[] = Array.isArray(materialsQuery.data) ? materialsQuery.data : [];
+  const loadingMaterials = !!materialsOpen && materialsQuery.isPending;
+
+  useEffect(() => {
+    if (!materialsQuery.error) return;
+    toast({ title: 'Error', description: 'Gagal memuat materi', variant: 'destructive' });
+  }, [materialsQuery.error, toast]);
+
+  const toggleMaterials = (trainingId: string) =>
+    setMaterialsOpen((prev) => (prev === trainingId ? null : trainingId));
+
+  const invalidateMaterials = (trainingId: string) =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.trainings.sub(trainingId, 'materials') });
+
+  const { mutate: uploadMaterial, isPending: uploading } = useMutation({
+    mutationFn: async ({ trainingId, file }: { trainingId: string; file: File }) => {
+      // 1) minta presigned URL
+      const presignData = await unwrap(apiClient.adminTrainings.presignUpload(trainingId, {
         file_name: file.name,
         content_type: file.type || 'application/octet-stream',
         file_size: file.size,
-      });
-      if (presignRes.error) throw new Error(presignRes.error);
-      const presignData = presignRes.data!;
+      }));
 
-      // Step 2: Upload file directly to S3 via presigned URL
+      // 2) unggah langsung ke S3
       const uploadRes = await fetch(presignData.upload_url, {
         method: 'PUT',
         headers: { 'Content-Type': presignData.content_type },
@@ -352,46 +364,57 @@ const TrainingManager = () => {
       });
       if (!uploadRes.ok) throw new Error('Upload ke S3 gagal');
 
-      // Step 3: Confirm upload to backend
-      const confirmRes = await apiClient.adminTrainings.confirmMaterial(trainingId, {
+      // 3) konfirmasi ke backend
+      return unwrap(apiClient.adminTrainings.confirmMaterial(trainingId, {
         material_id: presignData.material_id,
         name: file.name,
         s3_key: presignData.s3_key,
         content_type: presignData.content_type,
         file_size: file.size,
-      });
-      if (confirmRes.error) throw new Error(confirmRes.error);
-
+      }));
+    },
+    onSuccess: (_data, { trainingId, file }) => {
       toast({ title: 'Berhasil', description: `Materi "${file.name}" berhasil diupload` });
-      toggleMaterials(trainingId);
-    } catch (error: any) {
+      invalidateMaterials(trainingId);
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal mengupload materi', variant: 'destructive' });
-    } finally {
-      setUploading(false);
+    },
+    onSettled: () => {
       if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
+    },
+  });
 
-  const handleDownloadMaterial = async (trainingId: string, materialId: string, fileName: string) => {
-    try {
-      const res = await apiClient.adminTrainings.downloadMaterial(trainingId, materialId);
-      if (res.error) throw new Error(res.error);
-      window.open(res.data!.download_url, '_blank');
-    } catch (error: any) {
+  const handleFileUpload = (trainingId: string, file: File) => uploadMaterial({ trainingId, file });
+
+  const { mutate: downloadMaterial } = useMutation({
+    mutationFn: ({ trainingId, materialId }: { trainingId: string; materialId: string }) =>
+      unwrap(apiClient.adminTrainings.downloadMaterial(trainingId, materialId)),
+    onSuccess: (data) => {
+      window.open(data.download_url, '_blank');
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal mengunduh materi', variant: 'destructive' });
-    }
-  };
+    },
+  });
 
-  const handleDeleteMaterial = async (trainingId: string, materialId: string) => {
-    try {
-      const res = await apiClient.adminTrainings.deleteMaterial(trainingId, materialId);
-      if (res.error) throw new Error(res.error);
+  const handleDownloadMaterial = (trainingId: string, materialId: string, _fileName: string) =>
+    downloadMaterial({ trainingId, materialId });
+
+  const { mutate: removeMaterial } = useMutation({
+    mutationFn: ({ trainingId, materialId }: { trainingId: string; materialId: string }) =>
+      unwrap(apiClient.adminTrainings.deleteMaterial(trainingId, materialId)),
+    onSuccess: (_data, { trainingId }) => {
       toast({ title: 'Berhasil', description: 'Materi berhasil dihapus' });
-      toggleMaterials(trainingId);
-    } catch (error: any) {
+      invalidateMaterials(trainingId);
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal menghapus materi', variant: 'destructive' });
-    }
-  };
+    },
+  });
+
+  const handleDeleteMaterial = (trainingId: string, materialId: string) =>
+    removeMaterial({ trainingId, materialId });
 
   // FILTER
   const filtered = trainings.filter(t => {
@@ -764,10 +787,13 @@ const TrainingManager = () => {
               </div>
             </div>
 
-            <div>
-              <Label>Jenis Disabilitas (koma-separated)</Label>
-              <Input value={form.disability_types} onChange={(e) => setForm(f => ({ ...f, disability_types: e.target.value }))} placeholder="fisik, netra, tuli, dll" />
-            </div>
+            <DisabilityTypePicker
+              idPrefix="training-disability"
+              label="Ragam Disabilitas yang Diterima"
+              description="Pilih 'Semua Ragam' kalau pelatihan terbuka untuk siapa saja."
+              value={form.disability_types}
+              onChange={(csv) => setForm(f => ({ ...f, disability_types: csv }))}
+            />
 
             <div className="flex items-center gap-2">
               <input

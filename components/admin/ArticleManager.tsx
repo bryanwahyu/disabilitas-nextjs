@@ -1,10 +1,12 @@
-'use client';
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import DOMPurify from 'isomorphic-dompurify';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { sanitizeEditorHtml } from '@/lib/sanitize';
 import { apiClient } from '@/lib/api/client';
-import type { ArticleSummary, ArticleInsert, Article } from '@/lib/api/types';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
+import type { ArticleInsert, Article } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,8 +32,6 @@ import {
 } from '@/components/ui/dialog';
 
 const ArticleManager = () => {
-  const [articles, setArticles] = useState<ArticleSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -48,151 +48,138 @@ const ArticleManager = () => {
   });
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const listParams: { status?: string; limit: number } = { limit: 100 };
+  if (filterStatus !== 'all') listParams.status = filterStatus;
+
+  const { data: articles = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.articles.list(listParams),
+    queryFn: () => unwrap(apiClient.adminArticles.list(listParams)),
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
-    fetchArticles();
-  }, [filterStatus]);
+    if (!listError) return;
+    console.error('Error fetching articles:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data artikel",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
-  const fetchArticles = async () => {
-    try {
-      const params: { status?: string; limit: number } = { limit: 100 };
-      if (filterStatus !== 'all') {
-        params.status = filterStatus;
-      }
-      const response = await apiClient.adminArticles.list(params);
-      if (response.error) throw new Error(response.error);
-      setArticles(response.data || []);
-    } catch (error) {
-      console.error('Error fetching articles:', error);
+  const invalidateArticles = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.articles.lists() });
+
+  const { mutate: saveArticle } = useMutation({
+    mutationFn: ({ id, body }: { id: string | null; body: ArticleInsert }) =>
+      id
+        ? unwrap(apiClient.adminArticles.update(id, body))
+        : unwrap(apiClient.adminArticles.create(body)),
+    onSuccess: (_data, { id }) => {
       toast({
-        title: "Error",
-        description: "Gagal mengambil data artikel",
-        variant: "destructive",
+        title: "Berhasil",
+        description: id ? "Artikel berhasil diperbarui" : "Artikel berhasil ditambahkan",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      // Get content from contentEditable div and sanitize
-      const rawContent = editorRef.current?.innerHTML || formData.content || '';
-      const content = DOMPurify.sanitize(rawContent, {
-        ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'u', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'img', 'figure', 'figcaption', 'pre', 'code', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'class', 'id'],
-      });
-
-      const articleData = {
-        ...formData,
-        content,
-      };
-
-      if (editingArticle) {
-        const response = await apiClient.adminArticles.update(editingArticle.id, articleData);
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Artikel berhasil diperbarui",
-        });
-      } else {
-        const response = await apiClient.adminArticles.create(articleData);
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Artikel berhasil ditambahkan",
-        });
-      }
-
       setDialogOpen(false);
       resetForm();
-      fetchArticles();
-    } catch (error) {
+      invalidateArticles();
+    },
+    onError: (error) => {
       console.error('Error saving article:', error);
       toast({
         title: "Error",
         description: "Gagal menyimpan artikel",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Ambil isi dari contentEditable lalu sanitasi sebelum dikirim.
+    const rawContent = editorRef.current?.innerHTML || formData.content || '';
+    const content = sanitizeEditorHtml(rawContent);
+
+    saveArticle({ id: editingArticle?.id ?? null, body: { ...formData, content } });
   };
 
-  const handleEdit = async (id: string) => {
-    try {
-      const response = await apiClient.adminArticles.get(id);
-      if (response.data) {
-        setEditingArticle(response.data);
-        setFormData({
-          title: response.data.title,
-          content: response.data.content,
-          excerpt: response.data.excerpt,
-          cover_image: response.data.cover_image || '',
-          category: response.data.category,
-          tags: response.data.tags || '',
-          status: response.data.status,
-        });
-        setDialogOpen(true);
-        // Set content in editor after dialog opens
-        setTimeout(() => {
-          if (editorRef.current) {
-            editorRef.current.innerHTML = response.data?.content || '';
-          }
-        }, 100);
-      }
-    } catch (error) {
+  const { mutate: loadArticleForEdit } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminArticles.get(id)),
+    onSuccess: (article) => {
+      if (!article) return;
+      setEditingArticle(article);
+      setFormData({
+        title: article.title,
+        content: article.content,
+        excerpt: article.excerpt,
+        cover_image: article.cover_image || '',
+        category: article.category,
+        tags: article.tags || '',
+        status: article.status,
+      });
+      setDialogOpen(true);
+      // Editor baru ada di DOM setelah dialog terbuka.
+      setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.innerHTML = article.content || '';
+        }
+      }, 100);
+    },
+    onError: (error) => {
       console.error('Error fetching article:', error);
-    }
-  };
+    },
+  });
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus artikel ini?')) return;
+  const handleEdit = (id: string) => loadArticleForEdit(id);
 
-    try {
-      const response = await apiClient.adminArticles.delete(id);
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: removeArticle } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminArticles.delete(id)),
+    onSuccess: () => {
       toast({
         title: "Berhasil",
         description: "Artikel berhasil dihapus",
       });
-
-      fetchArticles();
-    } catch (error) {
+      invalidateArticles();
+    },
+    onError: (error) => {
       console.error('Error deleting article:', error);
       toast({
         title: "Error",
         description: "Gagal menghapus artikel",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus artikel ini?')) return;
+    removeArticle(id);
   };
 
-  const handlePublish = async (id: string, publish: boolean) => {
-    try {
-      const response = await apiClient.adminArticles.update(id, {
-        status: publish ? 'published' : 'draft',
-      });
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: setPublishStatus } = useMutation({
+    mutationFn: ({ id, publish }: { id: string; publish: boolean }) =>
+      unwrap(apiClient.adminArticles.update(id, { status: publish ? 'published' : 'draft' })),
+    onSuccess: (_data, { publish }) => {
       toast({
         title: "Berhasil",
         description: publish ? "Artikel berhasil dipublikasikan" : "Artikel dikembalikan ke draft",
       });
-
-      fetchArticles();
-    } catch (error) {
+      invalidateArticles();
+    },
+    onError: (error) => {
       console.error('Error updating article status:', error);
       toast({
         title: "Error",
         description: "Gagal mengubah status artikel",
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
+
+  const handlePublish = (id: string, publish: boolean) => setPublishStatus({ id, publish });
 
   const resetForm = () => {
     setFormData({

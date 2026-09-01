@@ -1,7 +1,6 @@
-'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from '@tanstack/react-router';
 import { apiClient } from '@/lib/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -39,7 +38,7 @@ export function ReportButton({
   const [sending, setSending] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const handleOpen = () => {
     if (!user) {
@@ -47,7 +46,7 @@ export function ReportButton({
         title: 'Perlu login',
         description: 'Silakan login untuk melaporkan konten',
       });
-      router.push('/auth');
+      navigate({ to: '/auth' });
       return;
     }
     setReason('');
@@ -88,7 +87,7 @@ export function ReportButton({
       <button
         type="button"
         onClick={handleOpen}
-        className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors"
         aria-label="Laporkan konten ini"
       >
         <Flag className="h-3 w-3" />

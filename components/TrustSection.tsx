@@ -1,5 +1,4 @@
-import Image from 'next/image';
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 import { Shield, Accessibility, Users, ArrowRight } from 'lucide-react';
 
 const values = [
@@ -50,7 +49,9 @@ const TrustSection = () => {
           <div className="p-6 rounded-2xl bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm flex-shrink-0">
-                <Image
+                <img
+                  loading="lazy"
+                  decoding="async"
                   src="/images/founder-bryan.png"
                   alt="Bryan Wahyu Kresna Putra"
                   width={48}
@@ -66,7 +67,7 @@ const TrustSection = () => {
             <p className="text-sm text-gray-600 leading-relaxed flex-1">
               Penyandang Cerebral Palsy, Technical Architect, dan builder. Membangun DisabilitasKu dari pengalaman nyata — bukan asumsi.
             </p>
-            <Link href="#founder" className="inline-flex items-center gap-1 text-xs font-semibold text-primary mt-4 hover:gap-2 transition-all">
+            <Link to="/" hash="founder" className="inline-flex items-center gap-1 text-xs font-semibold text-primary mt-4 hover:gap-2 transition-all">
               Baca ceritanya <ArrowRight className="w-3 h-3" />
             </Link>
           </div>

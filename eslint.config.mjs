@@ -1,18 +1,32 @@
 import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
+/**
+ * Konfigurasi ini dulu memuat `eslint-config-next`. Paket itu ikut dicopot saat
+ * migrasi ke TanStack Start, jadi config lama **gagal load** — `eslint` tidak
+ * bisa jalan sama sekali sejak 2026-08-11 tanpa ada yang menyadarinya.
+ *
+ * Sekarang hanya aturan inti ESLint, tanpa dependency tambahan. Cakupannya
+ * memang sempit: gerbang tipe yang sebenarnya adalah `npx tsc --noEmit`
+ * (`strictNullChecks` aktif). Untuk lint TypeScript sungguhan perlu memasang
+ * `typescript-eslint` — keputusan itu belum diambil.
+ */
+export default defineConfig([
   globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
+    ".output/**",
+    ".nitro/**",
+    "node_modules/**",
+    "src/routeTree.gen.ts", // digenerate plugin Vite
   ]),
+  {
+    files: ["**/*.{js,mjs,jsx,ts,tsx}"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+    },
+    rules: {
+      "no-debugger": "error",
+      "no-var": "error",
+      "prefer-const": "error",
+    },
+  },
 ]);
-
-export default eslintConfig;

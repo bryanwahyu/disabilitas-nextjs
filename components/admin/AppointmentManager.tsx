@@ -1,62 +1,58 @@
-'use client';
 
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, type Appointment } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar, Clock, User, MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
 
 const AppointmentManager = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchAppointments();
-  }, []);
+  const { data: appointments = [], isPending, error: listError } = useQuery({
+    queryKey: qk.admin.appointments.list(),
+    queryFn: () => unwrap(apiClient.appointments.list()),
+  });
 
-  const fetchAppointments = async () => {
-    try {
-      const { data, error } = await apiClient.appointments.list();
+  React.useEffect(() => {
+    if (!listError) return;
+    console.error('Error fetching appointments:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data janji temu",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
-      if (error) throw new Error(error);
-      setAppointments(data || []);
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-      toast({
-        title: "Error",
-        description: "Gagal mengambil data janji temu",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateAppointmentStatus = async (appointmentId: string, newStatus: string) => {
-    try {
-      const { error } = await apiClient.appointments.update(appointmentId, { status: newStatus });
-
-      if (error) throw new Error(error);
-
+  const { mutate: updateStatus } = useMutation({
+    mutationFn: ({ appointmentId, newStatus }: { appointmentId: string; newStatus: AppointmentStatus }) =>
+      unwrap(apiClient.appointments.update(appointmentId, { status: newStatus })),
+    onSuccess: (_data, { newStatus }) => {
       toast({
         title: "Berhasil",
         description: `Status janji temu berhasil diubah menjadi ${newStatus}`,
       });
-
-      fetchAppointments();
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: qk.admin.appointments.lists() });
+    },
+    onError: (error) => {
       console.error('Error updating appointment status:', error);
       toast({
         title: "Error",
         description: "Gagal mengubah status janji temu",
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
+
+  const updateAppointmentStatus = (appointmentId: string, newStatus: AppointmentStatus) =>
+    updateStatus({ appointmentId, newStatus });
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -70,7 +66,7 @@ const AppointmentManager = () => {
   };
 
   const getStatusActions = (appointment: Appointment) => {
-    const actions = [];
+    const actions: React.ReactNode[] = [];
 
     if (appointment.status === 'pending') {
       actions.push(
@@ -108,7 +104,7 @@ const AppointmentManager = () => {
     return actions;
   };
 
-  if (loading) {
+  if (isPending) {
     return <div className="text-center py-8">Memuat data janji temu...</div>;
   }
 
@@ -145,12 +141,12 @@ const AppointmentManager = () => {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4" />
-                          <span>User ID: {appointment.user_id}</span>
+                          <span>{appointment.user_name || `User ${appointment.user_id.slice(0, 8)}`}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
                           <span>
-                            {new Date(appointment.appointment_date).toLocaleDateString('id-ID', {
+                            {new Date(appointment.start_at).toLocaleDateString('id-ID', {
                               weekday: 'long',
                               year: 'numeric',
                               month: 'long',
@@ -161,7 +157,7 @@ const AppointmentManager = () => {
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4" />
                           <span>
-                            {new Date(appointment.appointment_date).toLocaleTimeString('id-ID', {
+                            {new Date(appointment.start_at).toLocaleTimeString('id-ID', {
                               hour: '2-digit',
                               minute: '2-digit'
                             })}
@@ -172,7 +168,7 @@ const AppointmentManager = () => {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <MapPin className="w-4 h-4" />
-                          <span>Provider ID: {appointment.therapist_id}</span>
+                          <span>{appointment.provider_name || `Provider ${appointment.provider_id.slice(0, 8)}`}</span>
                         </div>
                       </div>
                     </div>

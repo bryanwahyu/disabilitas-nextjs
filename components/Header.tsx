@@ -1,11 +1,9 @@
-'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, X, Shield, LogOut, User, Calendar, LayoutDashboard } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Menu, X, Shield, LogOut, User, Calendar, LayoutDashboard, ChevronDown } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
 
@@ -15,17 +13,28 @@ const Header = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTherapist, setIsTherapist] = useState(false);
   const { user, signOut } = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
 
-  const navigation = [
-    { name: 'Beranda', href: '/', isRoute: true },
-    { name: 'Terapis', href: '/terapis', isRoute: true },
-    { name: 'Lokasi Terapi', href: '/lokasi-terapi', isRoute: true },
-    { name: 'Rekomendasi', href: '/rekomendasi', isRoute: true },
-    { name: 'Pelatihan', href: '/pelatihan', isRoute: true },
-    { name: 'Cari Kerja', href: '/cari-kerja', isRoute: true },
-    { name: 'Komunitas', href: '/komunitas', isRoute: true },
-    { name: 'Artikel', href: '/artikel', isRoute: true },
+  // Nav dikelompokkan agar tidak sesak: 2 dropdown (Layanan, Belajar) + link tunggal.
+  type NavChild = { name: string; href: string };
+  type NavItem = { name: string; href?: string; children?: NavChild[] };
+  const navigation: NavItem[] = [
+    { name: 'Beranda', href: '/' },
+    {
+      name: 'Layanan',
+      children: [
+        { name: 'Terapis', href: '/terapis' },
+        { name: 'Tumbuh Kembang', href: '/tumbuh-kembang' },
+      ],
+    },
+    {
+      name: 'Belajar',
+      children: [
+        { name: 'Pelatihan', href: '/pelatihan' },
+        { name: 'Artikel', href: '/artikel' },
+      ],
+    },
+    { name: 'Komunitas', href: '/komunitas' },
   ];
 
   useEffect(() => {
@@ -57,13 +66,18 @@ const Header = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center group">
-            <Image
+          <Link to="/" className="flex items-center group">
+            {/* Aset lokal, bukan gambar remote: tidak ada optimizer server
+                lagi setelah lepas dari Next, jadi <img> biasa lebih jujur
+                daripada komponen yang menjanjikan resize/WebP yang tak terjadi.
+                `fetchPriority` menggantikan `priority` — logo ada di atas lipatan. */}
+            <img
               src="/logo.svg"
               alt="DisabilitasKu - Platform Inklusif"
               width={140}
               height={36}
-              priority
+              fetchPriority="high"
+              decoding="async"
               className="h-9 w-auto group-hover:scale-[1.02] transition-transform"
             />
           </Link>
@@ -71,27 +85,43 @@ const Header = () => {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1" role="navigation" aria-label="Main navigation">
             {navigation.map((item) => (
-              item.isRoute ? (
+              item.children ? (
+                <div key={item.name} className="relative group">
+                  <button
+                    className="flex items-center gap-1 text-gray-600 group-hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md group-hover:bg-primary/5"
+                    aria-haspopup="true"
+                  >
+                    {item.name}
+                    <ChevronDown size={14} className="transition-transform group-hover:rotate-180" />
+                  </button>
+                  {/* Dropdown: tampil saat hover/fokus. pt-1 menjaga jembatan hover. */}
+                  <div className="absolute left-0 top-full z-50 hidden min-w-[200px] pt-1 group-hover:block group-focus-within:block">
+                    <div className="rounded-lg border bg-white py-1.5 shadow-lg">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.name}
+                          to={child.href}
+                          className="block px-4 py-2 text-sm text-gray-600 hover:bg-primary/5 hover:text-primary transition-colors"
+                        >
+                          {child.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
                 <Link
                   key={item.name}
-                  href={item.href}
+                  to={item.href!}
                   className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
                 >
                   {item.name}
                 </Link>
-              ) : (
-                <a
-                  key={item.name}
-                  href={item.href}
-                  className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
-                >
-                  {item.name}
-                </a>
               )
             ))}
             {user && !isTherapist && (
               <Link
-                href="/jadwal"
+                to="/jadwal"
                 className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
               >
                 Jadwal
@@ -99,7 +129,7 @@ const Header = () => {
             )}
             {user?.role === 'orang_tua' && (
               <Link
-                href="/anak-saya"
+                to="/anak-saya"
                 className="text-gray-600 hover:text-primary px-4 py-2 text-sm font-medium transition-colors duration-200 rounded-md hover:bg-primary/5"
               >
                 Anak Saya
@@ -107,7 +137,7 @@ const Header = () => {
             )}
             {isTherapist && (
               <Link
-                href="/dashboard"
+                to="/dashboard"
                 className="text-primary font-semibold px-4 py-2 text-sm transition-colors duration-200 rounded-md hover:bg-primary/5"
               >
                 Dashboard
@@ -120,7 +150,7 @@ const Header = () => {
             {user && <NotificationBell />}
             {user && (
               <Button
-                onClick={() => router.push('/profil')}
+                onClick={() => navigate({ to: '/profil' })}
                 variant="ghost"
                 size="sm"
                 className="text-gray-600 hover:text-primary"
@@ -131,7 +161,7 @@ const Header = () => {
             )}
             {isAdmin && (
               <Button
-                onClick={() => router.push('/admin')}
+                onClick={() => navigate({ to: '/admin' })}
                 variant="outline"
                 size="sm"
                 className="border-primary text-primary hover:bg-primary hover:text-white"
@@ -152,7 +182,7 @@ const Header = () => {
               </Button>
             ) : (
               <Button
-                onClick={() => router.push('/auth')}
+                onClick={() => navigate({ to: '/auth' })}
                 className="bg-primary hover:bg-primary/90 text-white px-6"
               >
                 Bergabung Sekarang
@@ -181,29 +211,36 @@ const Header = () => {
           <div className="md:hidden border-t" id="mobile-menu">
             <div className="px-2 pt-2 pb-4 space-y-1 bg-white">
               {navigation.map((item) => (
-                item.isRoute ? (
+                item.children ? (
+                  <div key={item.name} className="pt-1">
+                    <p className="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {item.name}
+                    </p>
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.name}
+                        to={child.href}
+                        className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        {child.name}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    to={item.href!}
                     className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {item.name}
                   </Link>
-                ) : (
-                  <a
-                    key={item.name}
-                    href={item.href}
-                    className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {item.name}
-                  </a>
                 )
               ))}
               {user && !isTherapist && (
                 <Link
-                  href="/jadwal"
+                  to="/jadwal"
                   className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
@@ -213,7 +250,7 @@ const Header = () => {
               )}
               {user?.role === 'orang_tua' && (
                 <Link
-                  href="/anak-saya"
+                  to="/anak-saya"
                   className="text-gray-600 hover:text-primary hover:bg-primary/5 block px-4 py-3 text-base font-medium rounded-md transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
@@ -223,7 +260,7 @@ const Header = () => {
               )}
               {isTherapist && (
                 <Link
-                  href="/dashboard"
+                  to="/dashboard"
                   className="text-primary hover:bg-primary/5 block px-4 py-3 text-base font-semibold rounded-md transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
@@ -236,7 +273,7 @@ const Header = () => {
                 {user && (
                   <Button
                     onClick={() => {
-                      router.push('/profil');
+                      navigate({ to: '/profil' });
                       setIsMenuOpen(false);
                     }}
                     variant="ghost"
@@ -249,7 +286,7 @@ const Header = () => {
                 {isAdmin && (
                   <Button
                     onClick={() => {
-                      router.push('/admin');
+                      navigate({ to: '/admin' });
                       setIsMenuOpen(false);
                     }}
                     variant="outline"
@@ -274,7 +311,7 @@ const Header = () => {
                 ) : (
                   <Button
                     onClick={() => {
-                      router.push('/auth');
+                      navigate({ to: '/auth' });
                       setIsMenuOpen(false);
                     }}
                     className="w-full bg-primary hover:bg-primary/90 text-white"

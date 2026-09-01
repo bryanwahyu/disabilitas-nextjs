@@ -1,4 +1,3 @@
-'use client';
 
 import { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
 import { authService, type User, type LoginCredentials, type RegisterCredentials } from '@/lib/api';

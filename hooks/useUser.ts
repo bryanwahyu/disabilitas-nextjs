@@ -21,9 +21,10 @@ export const useUser = () => {
     setUserState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await userService.getUser(id);
-      if (response.error) {
-        setUserState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setUserState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setUserState(prev => ({ ...prev, isLoading: false, user: response.data as User }));
       return response;
@@ -37,9 +38,10 @@ export const useUser = () => {
     setUserState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await userService.getCurrentUser();
-      if (response.error) {
-        setUserState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setUserState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setUserState(prev => ({ ...prev, isLoading: false, user: response.data as User }));
       return response;
@@ -53,9 +55,10 @@ export const useUser = () => {
     setUserState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await userService.listUsers();
-      if (response.error) {
-        setUserState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setUserState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setUserState(prev => ({ ...prev, isLoading: false, users: (response.data || []) as User[] }));
       return response;
@@ -69,9 +72,10 @@ export const useUser = () => {
     setUserState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await userService.updateUser(id, data);
-      if (response.error) {
-        setUserState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setUserState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setUserState(prev => ({ ...prev, isLoading: false, user: response.data as User }));
       return response;
@@ -85,9 +89,10 @@ export const useUser = () => {
     setUserState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await userService.deleteUser(id);
-      if (response.error) {
-        setUserState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setUserState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setUserState(prev => ({ ...prev, isLoading: false }));
       return response;

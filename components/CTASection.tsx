@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 import { ArrowRight, Heart } from 'lucide-react';
 
 export default function CTASection() {
@@ -23,13 +23,13 @@ export default function CTASection() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/terapis"
+                to="/terapis"
                 className="inline-flex items-center gap-2 bg-white text-primary font-bold px-7 py-3.5 rounded-xl hover:bg-gray-50 transition-colors text-sm shadow-lg"
               >
                 Cari Terapis Sekarang <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                href="/cara-kerja"
+                to="/cara-kerja"
                 className="inline-flex items-center gap-2 text-white/80 hover:text-white font-medium text-sm transition-colors"
               >
                 Pelajari cara kerjanya →

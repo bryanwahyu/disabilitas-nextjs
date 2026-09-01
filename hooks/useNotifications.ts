@@ -28,9 +28,10 @@ export const useNotifications = (autoFetch: boolean = true) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       const response = await notificationService.listNotifications(params);
-      if (response.error) {
-        setState(prev => ({ ...prev, isLoading: false, error: response.error }));
-        return { error: response.error };
+      const errorMessage = response.error;
+      if (errorMessage) {
+        setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        return { error: errorMessage };
       }
       setState(prev => ({
         ...prev,

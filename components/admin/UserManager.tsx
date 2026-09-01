@@ -1,7 +1,9 @@
-'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,58 +59,65 @@ const getRoleConfig = (role: string) =>
   ROLE_CONFIG[role] || { label: role, color: 'bg-gray-100 text-gray-800 border-gray-200', icon: <UserCog className="w-3 h-3" /> };
 
 const UserManager = () => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.adminUsers.list({ page: 1, page_size: 200 });
-      if (response.error) throw new Error(response.error);
-      const data = Array.isArray(response.data) ? response.data : [];
-      setUsers(data);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      toast({ title: 'Error', description: 'Gagal mengambil data pengguna', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  const listParams = { page: 1, page_size: 200 };
+  const { data: userList, isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.users.list(listParams),
+    queryFn: () => unwrap(apiClient.adminUsers.list(listParams)),
+  });
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const users: User[] = Array.isArray(userList) ? userList : [];
 
-  const handleUpdateRole = async (userId: string, newRole: string) => {
-    setUpdatingRole(userId);
-    try {
-      const res = await apiClient.adminUsers.updateRole(userId, newRole);
-      if (res.error) throw new Error(res.error);
+  useEffect(() => {
+    if (!listError) return;
+    console.error('Error fetching users:', listError);
+    toast({ title: 'Error', description: 'Gagal mengambil data pengguna', variant: 'destructive' });
+  }, [listError, toast]);
+
+  const invalidateUsers = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.users.lists() });
+
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ userId, newRole }: { userId: string; newRole: string }) =>
+      unwrap(apiClient.adminUsers.updateRole(userId, newRole)),
+    onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Role pengguna diperbarui' });
-      fetchUsers();
-    } catch (error: any) {
+      invalidateUsers();
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal memperbarui role', variant: 'destructive' });
-    } finally {
-      setUpdatingRole(null);
-    }
-  };
+    },
+  });
 
-  const handleDelete = async () => {
-    if (!selectedUser) return;
-    try {
-      const res = await apiClient.adminUsers.delete(selectedUser.id);
-      if (res.error) throw new Error(res.error);
+  const updatingRole = updateRoleMutation.isPending
+    ? updateRoleMutation.variables?.userId ?? null
+    : null;
+
+  const { mutate: removeUser } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminUsers.delete(id)),
+    onSuccess: () => {
       toast({ title: 'Berhasil', description: 'Pengguna dihapus' });
       setDeleteDialogOpen(false);
       setSelectedUser(null);
-      fetchUsers();
-    } catch (error: any) {
+      invalidateUsers();
+    },
+    onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'Gagal menghapus pengguna', variant: 'destructive' });
-    }
+    },
+  });
+
+  const handleUpdateRole = (userId: string, newRole: string) =>
+    updateRoleMutation.mutate({ userId, newRole });
+
+  const handleDelete = () => {
+    if (!selectedUser) return;
+    removeUser(selectedUser.id);
   };
 
   const roleCounts = users.reduce<Record<string, number>>((acc, u) => {
@@ -160,7 +169,7 @@ const UserManager = () => {
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex items-center gap-2 flex-1">
-              <Search className="w-4 h-4 text-gray-400" />
+              <Search className="w-4 h-4 text-gray-500" />
               <Input
                 placeholder="Cari nama atau email..."
                 value={searchTerm}

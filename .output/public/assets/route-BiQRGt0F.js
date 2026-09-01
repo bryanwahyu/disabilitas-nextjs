@@ -1,0 +1,1 @@
+import{j as a,O as r}from"./index-aW8G_VO-.js";import{B as t}from"./JsonLd-CXn28Nzo.js";function i(){return a.jsxs(a.Fragment,{children:[a.jsx(t,{items:[{name:"Beranda",url:"https://disabilitasku.id"},{name:"Cara Kerja",url:"https://disabilitasku.id/cara-kerja"}]}),a.jsx(r,{})]})}export{i as component};

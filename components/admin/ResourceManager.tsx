@@ -1,8 +1,10 @@
-'use client';
 
 
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { Resource, ResourceInsert } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,8 +35,6 @@ const categories = [
 const resourceTypes = ['Artikel', 'Video', 'Tutorial', 'Panduan', 'Info'];
 
 const ResourceManager = () => {
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingResource, setEditingResource] = useState<Resource | null>(null);
   const [formData, setFormData] = useState<ResourceInsert>({
@@ -48,68 +48,56 @@ const ResourceManager = () => {
     is_published: true,
   });
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const listParams = { limit: 100 };
+  const { data: resourceList, isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.resources.list(listParams),
+    queryFn: () => unwrap(apiClient.adminResources.list(listParams)),
+  });
+
+  const resources: Resource[] = Array.isArray(resourceList) ? resourceList : [];
 
   useEffect(() => {
-    fetchResources();
-  }, []);
+    if (!listError) return;
+    console.error('Error fetching resources:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data sumber belajar",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
-  const fetchResources = async () => {
-    try {
-      const response = await apiClient.adminResources.list({ limit: 100 });
+  const invalidateResources = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.resources.lists() });
 
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      const data = Array.isArray(response.data) ? response.data : [];
-      setResources(data);
-    } catch (error) {
-      console.error('Error fetching resources:', error);
+  const { mutate: saveResource } = useMutation({
+    mutationFn: ({ id, body }: { id: string | null; body: ResourceInsert }) =>
+      id
+        ? unwrap(apiClient.adminResources.update(id, body))
+        : unwrap(apiClient.adminResources.create(body)),
+    onSuccess: (_data, { id }) => {
       toast({
-        title: "Error",
-        description: "Gagal mengambil data sumber belajar",
-        variant: "destructive",
+        title: "Berhasil",
+        description: id ? "Sumber belajar berhasil diperbarui" : "Sumber belajar berhasil ditambahkan",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      if (editingResource) {
-        const response = await apiClient.adminResources.update(editingResource.id, formData);
-
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Sumber belajar berhasil diperbarui",
-        });
-      } else {
-        const response = await apiClient.adminResources.create(formData);
-
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Sumber belajar berhasil ditambahkan",
-        });
-      }
-
       setDialogOpen(false);
       resetForm();
-      fetchResources();
-    } catch (error) {
+      invalidateResources();
+    },
+    onError: (error) => {
       console.error('Error saving resource:', error);
       toast({
         title: "Error",
         description: "Gagal menyimpan sumber belajar",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveResource({ id: editingResource?.id ?? null, body: formData });
   };
 
   const handleEdit = (resource: Resource) => {
@@ -127,28 +115,28 @@ const ResourceManager = () => {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus sumber belajar ini?')) return;
-
-    try {
-      const response = await apiClient.adminResources.delete(id);
-
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: removeResource } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminResources.delete(id)),
+    onSuccess: () => {
       toast({
         title: "Berhasil",
         description: "Sumber belajar berhasil dihapus",
       });
-
-      fetchResources();
-    } catch (error) {
+      invalidateResources();
+    },
+    onError: (error) => {
       console.error('Error deleting resource:', error);
       toast({
         title: "Error",
         description: "Gagal menghapus sumber belajar",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus sumber belajar ini?')) return;
+    removeResource(id);
   };
 
   const resetForm = () => {
@@ -345,7 +333,7 @@ const ResourceManager = () => {
                       <Badge variant="outline">{getCategoryLabel(resource.category)}</Badge>
                       <Badge variant="outline">{resource.type}</Badge>
                       {resource.read_time && (
-                        <span className="text-gray-400">| {resource.read_time}</span>
+                        <span className="text-gray-500">| {resource.read_time}</span>
                       )}
                     </div>
                   </div>

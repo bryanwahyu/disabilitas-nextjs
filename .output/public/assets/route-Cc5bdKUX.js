@@ -1,0 +1,1 @@
+import{j as t,O as r}from"./index-aW8G_VO-.js";import{B as s}from"./JsonLd-CXn28Nzo.js";function m(){return t.jsxs(t.Fragment,{children:[t.jsx(s,{items:[{name:"Beranda",url:"https://disabilitasku.id"},{name:"Forum",url:"https://disabilitasku.id/forum"}]}),t.jsx(r,{})]})}export{m as component};

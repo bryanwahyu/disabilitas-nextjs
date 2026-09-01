@@ -1,13 +1,42 @@
 /**
- * Server-side fetch helpers for SEO metadata generation.
- * These are lightweight functions that bypass the client-side apiClient
- * (which uses localStorage) and work in Next.js server components.
+ * Pengambil data untuk metadata SEO, dipakai `loader`/`head` route.
+ *
+ * Sengaja tidak lewat `apiClient` karena klien itu membaca `localStorage` —
+ * tidak ada di server.
+ *
+ * Cache: `fetch(..., { next: { revalidate: 3600 } })` milik Next sudah tidak
+ * ada padanannya. Penggantinya `cachedFetch` di bawah — cache TTL sederhana di
+ * memori proses. Konsekuensi yang harus disadari: cache-nya per-proses (tidak
+ * dibagi antar-container) dan hilang saat restart. Untuk data SEO yang berubah
+ * pelan, itu cukup; yang penting halaman artikel dan sitemap tidak memukul API
+ * di setiap request crawler.
  */
 
-import type { TherapyLocation, ForumThread, ForumComment } from './types';
+import type { ForumThread, ForumComment } from './types';
+import { env } from '@/lib/env';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8082/v1';
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://disabilitasku.id';
+const BASE_URL = env.apiBaseUrl;
+export const SITE_URL = env.siteUrl;
+
+const CACHE_TTL_MS = 3600 * 1000;
+const cache = new Map<string, { at: number; response: unknown }>();
+
+/**
+ * `fetch` + cache TTL satu jam, disimpan sebagai JSON hasil parse.
+ *
+ * Hanya untuk GET data publik: tidak ada header autentikasi di sini, jadi tak
+ * ada risiko data satu user tersimpan lalu terbaca user lain.
+ */
+async function cachedFetchJson(url: string): Promise<unknown | null> {
+  const hit = cache.get(url);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.response;
+
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const json = await res.json();
+  cache.set(url, { at: Date.now(), response: json });
+  return json;
+}
 
 export function parseTags(csv?: string): string[] {
   return csv?.split(',').map((t) => t.trim()).filter(Boolean) || [];
@@ -69,28 +98,6 @@ interface CommunityListItem {
   created_at: string;
 }
 
-export type TherapyLocationSEO = Pick<
-  TherapyLocation,
-  | 'id'
-  | 'name'
-  | 'type'
-  | 'address'
-  | 'city_code'
-  | 'city_name'
-  | 'description'
-  | 'phone'
-  | 'email'
-  | 'website'
-  | 'latitude'
-  | 'longitude'
-  | 'is_verified'
-  | 'services'
-  | 'open_hours'
-  | 'created_at'
-  | 'updated_at'
-  | 'contact_locked'
->;
-
 export type ForumThreadSEO = ForumThread & { comments?: ForumComment[] };
 
 interface BasicListItem {
@@ -101,11 +108,10 @@ interface BasicListItem {
 
 async function seoFetch<T>(endpoint: string): Promise<T | null> {
   try {
-    const res = await fetch(`${BASE_URL}${endpoint}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
+    const json = (await cachedFetchJson(`${BASE_URL}${endpoint}`)) as
+      | { data?: unknown }
+      | null;
+    if (json === null) return null;
     return (json.data ?? json) as T;
   } catch {
     return null;
@@ -114,21 +120,59 @@ async function seoFetch<T>(endpoint: string): Promise<T | null> {
 
 async function seoFetchList<T>(endpoint: string): Promise<T[]> {
   try {
-    const res = await fetch(`${BASE_URL}${endpoint}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
+    const json = (await cachedFetchJson(`${BASE_URL}${endpoint}`)) as any;
+    if (json === null) return [];
     const result = json.data ?? json;
-    const list = Array.isArray(result) ? (result as T[]) : [];
-    const limitMatch = endpoint.match(/[?&]limit=(\d+)/);
-    if (limitMatch && list.length === Number(limitMatch[1])) {
-      console.warn(`[sitemap-canary] ${endpoint} returned exactly ${list.length} items — list likely truncated, consider paginating with generateSitemaps()`);
-    }
-    return list;
+    return Array.isArray(result) ? (result as T[]) : [];
   } catch {
     return [];
   }
+}
+
+/**
+ * Ambil SELURUH isi sebuah list endpoint dengan menyusuri halamannya.
+ *
+ * `?limit=1000` yang dipakai sebelumnya tidak pernah bekerja: `clampLimit` di
+ * Go memotong limit apa pun ke maksimal 100, jadi sitemap diam-diam berhenti
+ * di 100 entri pertama. Yang dulu menjaga hal ini cuma `console.warn`
+ * "[sitemap-canary]" — peringatan yang ikut menyala untuk pemanggilan biasa
+ * seperti `getHomepageArticles(6)` (6 artikel = tepat sebanyak limit), jadi
+ * log produksi penuh olehnya sementara pemotongan aslinya tetap terjadi.
+ *
+ * Di sini halaman ditarik satu per satu sampai `meta.total` terpenuhi. Ada dua
+ * bentuk meta di API: `{ total, curr_page, total_page }` (respondList) dan
+ * `{ total, page, per_page }` (resp.Meta) — keduanya cukup diperiksa lewat
+ * `total`, jadi tidak perlu tahu handler mana yang menjawab.
+ */
+async function seoFetchAll<T>(
+  path: string,
+  { perPage = 100, maxPages = 50, param = 'limit' as 'limit' | 'per_page' } = {}
+): Promise<T[]> {
+  const items: T[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const sep = path.includes('?') ? '&' : '?';
+    const url = `${BASE_URL}${path}${sep}${param}=${perPage}&page=${page}`;
+
+    let json: any;
+    try {
+      json = await cachedFetchJson(url);
+    } catch {
+      break;
+    }
+    if (json === null) break;
+
+    const batch = json.data ?? json;
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    items.push(...(batch as T[]));
+
+    const total = Number(json.meta?.total ?? 0);
+    if (!total || items.length >= total) break;
+    // Halaman penuh terakhir: berhenti daripada meminta halaman kosong.
+    if (batch.length < perPage) break;
+  }
+
+  return items;
 }
 
 export async function getArticleForSEO(slug: string) {
@@ -167,41 +211,20 @@ export async function getCommunityForSEO(id: string): Promise<CommunitySEO | nul
 }
 
 export async function getAllArticleSlugs() {
-  return seoFetchList<ArticleListItem>('/public/articles?limit=1000');
+  return seoFetchAll<ArticleListItem>('/public/articles');
 }
 
 export async function getAllEventIds() {
-  return seoFetchList<EventListItem>('/events?limit=1000');
+  return seoFetchAll<EventListItem>('/events');
 }
 
 export async function getAllCommunityIds(): Promise<CommunityListItem[]> {
-  const raw = await seoFetchList<RawCommunitySEO>('/public/communities?per_page=100');
+  // `/public/communities` satu-satunya list yang memakai `per_page`, bukan
+  // `limit` (lihat pagination.FromQuery di Go); `limit` di sini diabaikan diam-diam.
+  const raw = await seoFetchAll<RawCommunitySEO>('/public/communities', { param: 'per_page' });
   return raw
     .map((c) => ({ id: c.ID || c.id || '', created_at: c.CreatedAt || c.created_at || '' }))
     .filter((c) => c.id);
-}
-
-type TherapyLocationDetailEnvelope =
-  | TherapyLocationSEO
-  | { summary: TherapyLocationSEO; open_hours?: TherapyLocation['open_hours'] };
-
-function hasSummary(
-  raw: TherapyLocationDetailEnvelope,
-): raw is { summary: TherapyLocationSEO; open_hours?: TherapyLocation['open_hours'] } {
-  return (raw as { summary?: TherapyLocationSEO }).summary !== undefined;
-}
-
-export async function getTherapyLocationForSEO(id: string): Promise<TherapyLocationSEO | null> {
-  const raw = await seoFetch<TherapyLocationDetailEnvelope>(`/therapy/locations/${id}`);
-  if (!raw) return null;
-  if (hasSummary(raw)) {
-    return { ...raw.summary, open_hours: raw.open_hours };
-  }
-  return raw;
-}
-
-export async function getAllTherapyLocationIds() {
-  return seoFetchList<BasicListItem>('/therapy/locations?limit=1000');
 }
 
 export async function getForumThreadForSEO(id: string) {
@@ -209,15 +232,60 @@ export async function getForumThreadForSEO(id: string) {
 }
 
 export async function getAllForumThreadIds() {
-  return seoFetchList<BasicListItem>('/public/forum/threads?limit=1000');
-}
-
-export async function getAllJobIds() {
-  return seoFetchList<BasicListItem>('/public/jobs?limit=1000');
+  return seoFetchAll<BasicListItem>('/public/forum/threads');
 }
 
 export async function getAllTrainingIds() {
-  return seoFetchList<BasicListItem>('/public/trainings?limit=1000');
+  return seoFetchAll<BasicListItem>('/public/trainings');
+}
+
+export interface TherapistSEO {
+  id: string;
+  full_name?: string;
+  email?: string;
+  city?: string;
+  district?: string;
+  bio?: string;
+  specialization?: string;
+  experience_years?: number;
+  is_verified?: boolean;
+  locations?: Array<{ id: string; name: string; city_name?: string }>;
+}
+
+export interface TrainingSEO {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  training_type?: string;
+  skill_level?: string;
+  organizer_name?: string;
+  cover_image?: string;
+}
+
+/** Satu pelatihan untuk metadata halaman `/pelatihan/$id`. */
+export async function getTrainingForSEO(id: string) {
+  return seoFetch<TrainingSEO>(`/public/trainings/${id}`);
+}
+
+/** Profil satu terapis untuk metadata halaman `/terapis/$id`. */
+export async function getTherapistForSEO(id: string) {
+  return seoFetch<TherapistSEO>(`/therapy/providers/${id}`);
+}
+
+/**
+ * Semua id terapis untuk sitemap.
+ *
+ * Halaman profil terapis adalah halaman terpenting platform ini dan sebelumnya
+ * tidak satu pun masuk sitemap.
+ */
+export async function getAllTherapistIds(): Promise<BasicListItem[]> {
+  const raw = await seoFetchAll<{ id?: string; ID?: string; updated_at?: string; created_at?: string }>(
+    '/therapy/providers'
+  );
+  return raw
+    .map((t) => ({ id: t.id || t.ID || '', updated_at: t.updated_at, created_at: t.created_at }))
+    .filter((t) => t.id);
 }
 
 export async function getHomepageArticles(limit = 6) {
@@ -239,9 +307,8 @@ interface ListMetaEnvelope {
 
 async function seoFetchMeta(endpoint: string): Promise<{ total: number }> {
   try {
-    const res = await fetch(`${BASE_URL}${endpoint}`, { next: { revalidate: 3600 } });
-    if (!res.ok) return { total: 0 };
-    const json: ListMetaEnvelope = await res.json();
+    const json = (await cachedFetchJson(`${BASE_URL}${endpoint}`)) as ListMetaEnvelope | null;
+    if (json === null) return { total: 0 };
     return {
       total: json.meta?.total ?? (Array.isArray(json.data) ? json.data.length : 0),
     };
@@ -252,9 +319,8 @@ async function seoFetchMeta(endpoint: string): Promise<{ total: number }> {
 
 export async function getHomepageStats() {
   try {
-    const res = await fetch(`${BASE_URL}/public/stats`, { next: { revalidate: 3600 } });
-    if (res.ok) {
-      const json = await res.json();
+    const json = (await cachedFetchJson(`${BASE_URL}/public/stats`)) as any;
+    if (json !== null) {
       const d = json.data ?? {};
       return {
         users: d.users ?? 0,

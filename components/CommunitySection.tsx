@@ -1,11 +1,12 @@
-'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MessageCircle, Users, Calendar, ArrowRight, Flame, Clock } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { ForumThread, Event } from '@/lib/api/client';
 
 interface CommunitySectionProps {
@@ -14,33 +15,21 @@ interface CommunitySectionProps {
 }
 
 const CommunitySection = ({ initialThreads, initialEvents }: CommunitySectionProps = {}) => {
-  const hasInitial = initialThreads !== undefined && initialEvents !== undefined;
-  const [forumTopics, setForumTopics] = useState<ForumThread[]>(initialThreads || []);
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>(initialEvents || []);
-  const [loading, setLoading] = useState(!hasInitial);
+  // Dipisah jadi dua query: dulu satu `Promise.all` — forum gagal ikut mengosongkan
+  // kolom event, padahal keduanya tak saling bergantung.
+  const { data: forumTopics = [], isPending: threadsPending } = useQuery({
+    queryKey: qk.forum.list({ limit: 4, scope: 'beranda' }),
+    queryFn: async () => (await unwrap(apiClient.forum.listThreads())).slice(0, 4),
+    initialData: initialThreads,
+    staleTime: 30 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    if (hasInitial) return;
-    (async () => {
-      try {
-        const [forumRes, eventsRes] = await Promise.all([
-          apiClient.forum.listThreads(),
-          apiClient.events.list({ limit: 3 }),
-        ]);
-
-        if (forumRes.data && Array.isArray(forumRes.data)) {
-          setForumTopics(forumRes.data.slice(0, 4));
-        }
-        if (eventsRes.data && Array.isArray(eventsRes.data)) {
-          setUpcomingEvents(eventsRes.data);
-        }
-      } catch (error) {
-        console.error('Error fetching community data:', error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [hasInitial]);
+  const { data: upcomingEvents = [], isPending: eventsPending } = useQuery({
+    queryKey: qk.events.list({ limit: 3, scope: 'beranda' }),
+    queryFn: () => unwrap(apiClient.events.list({ limit: 3 })),
+    initialData: initialEvents,
+    staleTime: 30 * 60 * 1000,
+  });
 
   const formatEventDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -130,13 +119,13 @@ const CommunitySection = ({ initialThreads, initialEvents }: CommunitySectionPro
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Diskusi Terbaru</h3>
               </div>
-              <Link href="/forum" className="text-sm font-medium text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+              <Link to="/forum" className="text-sm font-medium text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
                 Semua <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
             <div className="space-y-3">
-              {loading ? (
+              {threadsPending ? (
                 <>
                   <SkeletonCard />
                   <SkeletonCard />
@@ -149,7 +138,7 @@ const CommunitySection = ({ initialThreads, initialEvents }: CommunitySectionPro
                 </div>
               ) : (
                 forumTopics.map((topic) => (
-                  <Link key={topic.id} href={`/forum/${topic.id}`} className="block">
+                  <Link key={topic.id} to="/forum/$id" params={{ id: topic.id }} className="block">
                     <div className="p-4 rounded-xl bg-white border border-gray-100 hover:border-violet-200 hover:shadow-md transition-all duration-250 group">
                       <h4 className="text-sm font-semibold text-gray-900 group-hover:text-primary transition-colors line-clamp-1 mb-2">
                         {topic.title}
@@ -179,7 +168,7 @@ const CommunitySection = ({ initialThreads, initialEvents }: CommunitySectionPro
               )}
             </div>
 
-            <Link href="/forum" className="block mt-4">
+            <Link to="/forum" className="block mt-4">
               <Button className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-semibold shadow-md shadow-violet-500/20">
                 <Flame className="w-4 h-4 mr-2" />
                 Mulai Diskusi Baru
@@ -196,13 +185,13 @@ const CommunitySection = ({ initialThreads, initialEvents }: CommunitySectionPro
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Event Mendatang</h3>
               </div>
-              <Link href="/acara" className="text-sm font-medium text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+              <Link to="/acara" className="text-sm font-medium text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
                 Semua <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
             <div className="space-y-3">
-              {loading ? (
+              {eventsPending ? (
                 <>
                   <SkeletonCard />
                   <SkeletonCard />
@@ -215,7 +204,7 @@ const CommunitySection = ({ initialThreads, initialEvents }: CommunitySectionPro
                 </div>
               ) : (
                 upcomingEvents.map((event) => (
-                  <Link key={event.id} href={`/acara/${event.id}`} className="block">
+                  <Link key={event.id} to="/acara/$id" params={{ id: event.id }} className="block">
                     <div className="p-4 rounded-xl bg-white border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all duration-250 group">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <h4 className="text-sm font-semibold text-gray-900 group-hover:text-primary transition-colors line-clamp-1 flex-1">

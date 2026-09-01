@@ -1,8 +1,10 @@
-'use client';
 
 
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { TherapyLocation, TherapyLocationInsert, Country, State, City, LocationHour } from '@/lib/api/types';
 import { LOCATION_TYPES } from '@/lib/api/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,15 +40,10 @@ import {
 import { cn } from '@/lib/utils';
 
 const LocationManager = () => {
-  const [locations, setLocations] = useState<TherapyLocation[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<TherapyLocation | null>(null);
 
   // Location dropdowns
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [states, setStates] = useState<State[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [selectedState, setSelectedState] = useState<string>('');
 
@@ -77,89 +74,84 @@ const LocationManager = () => {
   const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const listParams = { limit: 100 };
+  const { data: locations = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.therapyLocations.list(listParams),
+    queryFn: () => unwrap(apiClient.adminTherapyLocations.list(listParams)),
+  });
 
   useEffect(() => {
-    fetchLocations();
-    fetchCountries();
-  }, []);
+    if (!listError) return;
+    console.error('Error fetching locations:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data lokasi terapi",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
+  // Master data wilayah nyaris tak berubah — cukup sekali per sesi.
+  const MASTER_STALE = 30 * 60 * 1000;
+
+  const { data: countries = [] } = useQuery<Country[]>({
+    queryKey: qk.locations.list({ level: 'countries' }),
+    queryFn: () => unwrap(apiClient.locations.countries()),
+    staleTime: MASTER_STALE,
+  });
+
+  const { data: states = [] } = useQuery<State[]>({
+    queryKey: qk.locations.list({ level: 'states', country: selectedCountry }),
+    queryFn: () => unwrap(apiClient.locations.states(selectedCountry)),
+    enabled: !!selectedCountry,
+    staleTime: MASTER_STALE,
+  });
+
+  const { data: cities = [] } = useQuery<City[]>({
+    queryKey: qk.locations.list({ level: 'cities', state: selectedState }),
+    queryFn: () => unwrap(apiClient.locations.cities(selectedState)),
+    enabled: !!selectedState,
+    staleTime: MASTER_STALE,
+  });
+
+  // Default ke Indonesia begitu daftar negara tersedia.
   useEffect(() => {
-    if (selectedCountry) {
-      fetchStates(selectedCountry);
-      setSelectedState('');
-      setCities([]);
-      setFormData(prev => ({ ...prev, city_code: '' }));
-    }
-  }, [selectedCountry]);
+    if (selectedCountry) return;
+    if (countries.some((c) => c.code === 'ID')) setSelectedCountry('ID');
+  }, [countries, selectedCountry]);
 
-  useEffect(() => {
-    if (selectedState) {
-      fetchCities(selectedState);
-      setFormData(prev => ({ ...prev, city_code: '' }));
-    }
-  }, [selectedState]);
+  const invalidateLocations = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.therapyLocations.lists() });
 
-  const fetchCountries = async () => {
-    try {
-      const response = await apiClient.locations.countries();
-      if (response.data) {
-        setCountries(response.data);
-        // Default to Indonesia
-        if (response.data.length > 0) {
-          const indonesia = response.data.find(c => c.code === 'ID');
-          if (indonesia) {
-            setSelectedCountry('ID');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching countries:', error);
-    }
-  };
-
-  const fetchStates = async (countryCode: string) => {
-    try {
-      const response = await apiClient.locations.states(countryCode);
-      if (response.data) {
-        setStates(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching states:', error);
-    }
-  };
-
-  const fetchCities = async (stateCode: string) => {
-    try {
-      const response = await apiClient.locations.cities(stateCode);
-      if (response.data) {
-        setCities(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching cities:', error);
-    }
-  };
-
-  const fetchLocations = async () => {
-    try {
-      const response = await apiClient.adminTherapyLocations.list({ limit: 100 });
-      if (response.error) throw new Error(response.error);
-      setLocations(response.data || []);
-    } catch (error) {
-      console.error('Error fetching locations:', error);
+  const { mutate: saveLocation } = useMutation({
+    mutationFn: ({ id, body }: { id: string | null; body: TherapyLocationInsert }) =>
+      id
+        ? unwrap(apiClient.adminTherapyLocations.update(id, body))
+        : unwrap(apiClient.adminTherapyLocations.create(body)),
+    onSuccess: (_data, { id }) => {
+      toast({
+        title: "Berhasil",
+        description: id ? "Lokasi terapi berhasil diperbarui" : "Lokasi terapi berhasil ditambahkan",
+      });
+      setDialogOpen(false);
+      resetForm();
+      invalidateLocations();
+    },
+    onError: (error) => {
+      console.error('Error saving location:', error);
       toast({
         title: "Error",
-        description: "Gagal mengambil data lokasi terapi",
+        description: "Gagal menyimpan lokasi terapi",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Clean up empty strings to avoid validation errors
+    // Buang string kosong supaya tidak kena validasi backend.
     const cleanData: TherapyLocationInsert = {
       name: formData.name,
       address: formData.address,
@@ -175,39 +167,10 @@ const LocationManager = () => {
       ...(formData.open_hours && formData.open_hours.length > 0 && { open_hours: formData.open_hours }),
     };
 
-    try {
-      if (editingLocation) {
-        const response = await apiClient.adminTherapyLocations.update(editingLocation.id, cleanData);
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Lokasi terapi berhasil diperbarui",
-        });
-      } else {
-        const response = await apiClient.adminTherapyLocations.create(cleanData);
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Lokasi terapi berhasil ditambahkan",
-        });
-      }
-
-      setDialogOpen(false);
-      resetForm();
-      fetchLocations();
-    } catch (error) {
-      console.error('Error saving location:', error);
-      toast({
-        title: "Error",
-        description: "Gagal menyimpan lokasi terapi",
-        variant: "destructive",
-      });
-    }
+    saveLocation({ id: editingLocation?.id ?? null, body: cleanData });
   };
 
-  const handleEdit = async (location: TherapyLocation) => {
+  const handleEdit = (location: TherapyLocation) => {
     setEditingLocation(location);
     setFormData({
       name: location.name,
@@ -224,66 +187,63 @@ const LocationManager = () => {
       open_hours: location.open_hours || [],
     });
 
-    // Set country and state based on city_code
+    // Turunkan negara & provinsi dari kode kota (mis. ID-JK-JS → ID, ID-JK).
     if (location.city_code) {
-      // Parse state code from city code (e.g., ID-JK-JS -> ID-JK)
       const parts = location.city_code.split('-');
       if (parts.length >= 2) {
-        const countryCode = parts[0];
-        const stateCode = `${parts[0]}-${parts[1]}`;
-        setSelectedCountry(countryCode);
-        await fetchStates(countryCode);
-        setSelectedState(stateCode);
-        await fetchCities(stateCode);
+        setSelectedCountry(parts[0]);
+        setSelectedState(`${parts[0]}-${parts[1]}`);
       }
     }
 
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus lokasi terapi ini?')) return;
-
-    try {
-      const response = await apiClient.adminTherapyLocations.delete(id);
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: removeLocation } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminTherapyLocations.delete(id)),
+    onSuccess: () => {
       toast({
         title: "Berhasil",
         description: "Lokasi terapi berhasil dihapus",
       });
-
-      fetchLocations();
-    } catch (error) {
+      invalidateLocations();
+    },
+    onError: (error) => {
       console.error('Error deleting location:', error);
       toast({
         title: "Error",
         description: "Gagal menghapus lokasi terapi",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus lokasi terapi ini?')) return;
+    removeLocation(id);
   };
 
-  const handleVerify = async (id: string, isVerified: boolean) => {
-    try {
-      const response = await apiClient.adminTherapyLocations.update(id, { is_verified: isVerified });
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: setVerification } = useMutation({
+    mutationFn: ({ id, isVerified }: { id: string; isVerified: boolean }) =>
+      unwrap(apiClient.adminTherapyLocations.update(id, { is_verified: isVerified })),
+    onSuccess: (_data, { isVerified }) => {
       toast({
         title: "Berhasil",
         description: isVerified ? "Lokasi terapi berhasil diverifikasi" : "Verifikasi lokasi terapi dicabut",
       });
-
-      fetchLocations();
-    } catch (error) {
+      invalidateLocations();
+    },
+    onError: (error) => {
       console.error('Error updating verification:', error);
       toast({
         title: "Error",
         description: "Gagal mengubah status verifikasi",
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
+
+  const handleVerify = (id: string, isVerified: boolean) => setVerification({ id, isVerified });
 
   const resetForm = () => {
     setFormData({
@@ -302,7 +262,6 @@ const LocationManager = () => {
     });
     setEditingLocation(null);
     setSelectedState('');
-    setCities([]);
     setServiceInput('');
   };
 
@@ -456,6 +415,8 @@ const LocationManager = () => {
                                   value={country.name}
                                   onSelect={() => {
                                     setSelectedCountry(country.code);
+                                    setSelectedState('');
+                                    setFormData((prev) => ({ ...prev, city_code: '' }));
                                     setCountryOpen(false);
                                   }}
                                 >
@@ -504,6 +465,7 @@ const LocationManager = () => {
                                   value={state.name}
                                   onSelect={() => {
                                     setSelectedState(state.code);
+                                    setFormData((prev) => ({ ...prev, city_code: '' }));
                                     setStateOpen(false);
                                   }}
                                 >

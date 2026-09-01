@@ -1,8 +1,10 @@
-'use client';
 
 
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,8 +38,6 @@ interface Therapist {
 }
 
 const TherapistManager = () => {
-  const [therapists, setTherapists] = useState<Therapist[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTherapist, setEditingTherapist] = useState<Therapist | null>(null);
   const [formData, setFormData] = useState({
@@ -54,39 +54,61 @@ const TherapistManager = () => {
     image_url: '',
   });
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: therapists = [], isPending: loading, error: listError } = useQuery({
+    queryKey: qk.admin.therapyLocations.of('therapists'),
+    queryFn: async () => {
+      const data = await unwrap(apiClient.from('therapists').select().execute());
+      // Backend belum mengurutkan, jadi tetap diurutkan di klien.
+      return Array.isArray(data)
+        ? (data as Therapist[]).slice().sort(
+            (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+        : [];
+    },
+  });
 
   useEffect(() => {
-    fetchTherapists();
-  }, []);
+    if (!listError) return;
+    console.error('Error fetching therapists:', listError);
+    toast({
+      title: "Error",
+      description: "Gagal mengambil data terapis",
+      variant: "destructive",
+    });
+  }, [listError, toast]);
 
-  const fetchTherapists = async () => {
-    try {
-      const response = await apiClient.from('therapists').select().execute();
+  const invalidateTherapists = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.therapyLocations.of('therapists') });
 
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      
-      // Sort by created_at on client side
-      const sortedData = Array.isArray(response.data)
-        ? response.data.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        : [];
-      setTherapists(sortedData);
-    } catch (error) {
-      console.error('Error fetching therapists:', error);
+  const { mutate: saveTherapist } = useMutation({
+    mutationFn: ({ id, body }: { id: string | null; body: Record<string, unknown> }) =>
+      id
+        ? unwrap(apiClient.from('therapists').update(body).eq('id', id))
+        : unwrap(apiClient.from('therapists').insert(body)),
+    onSuccess: (_data, { id }) => {
+      toast({
+        title: "Berhasil",
+        description: id ? "Data terapis berhasil diperbarui" : "Terapis berhasil ditambahkan",
+      });
+      setDialogOpen(false);
+      resetForm();
+      invalidateTherapists();
+    },
+    onError: (error) => {
+      console.error('Error saving therapist:', error);
       toast({
         title: "Error",
-        description: "Gagal mengambil data terapis",
+        description: "Gagal menyimpan data terapis",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const submitData = {
       ...formData,
       languages: formData.languages.split(',').map(lang => lang.trim()),
@@ -94,40 +116,7 @@ const TherapistManager = () => {
       price_per_session: formData.price_per_session || null,
     };
 
-    try {
-      if (editingTherapist) {
-        const response = await apiClient.from('therapists')
-          .update(submitData)
-          .eq('id', editingTherapist.id);
-
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Data terapis berhasil diperbarui",
-        });
-      } else {
-        const response = await apiClient.from('therapists').insert(submitData);
-
-        if (response.error) throw new Error(response.error);
-
-        toast({
-          title: "Berhasil",
-          description: "Terapis berhasil ditambahkan",
-        });
-      }
-
-      setDialogOpen(false);
-      resetForm();
-      fetchTherapists();
-    } catch (error) {
-      console.error('Error saving therapist:', error);
-      toast({
-        title: "Error",
-        description: "Gagal menyimpan data terapis",
-        variant: "destructive",
-      });
-    }
+    saveTherapist({ id: editingTherapist?.id ?? null, body: submitData });
   };
 
   const handleEdit = (therapist: Therapist) => {
@@ -148,30 +137,28 @@ const TherapistManager = () => {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus terapis ini?')) return;
-
-    try {
-      const response = await apiClient.from('therapists')
-        .delete()
-        .eq('id', id);
-
-      if (response.error) throw new Error(response.error);
-
+  const { mutate: removeTherapist } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.from('therapists').delete().eq('id', id)),
+    onSuccess: () => {
       toast({
         title: "Berhasil",
         description: "Terapis berhasil dihapus",
       });
-
-      fetchTherapists();
-    } catch (error) {
+      invalidateTherapists();
+    },
+    onError: (error) => {
       console.error('Error deleting therapist:', error);
       toast({
         title: "Error",
         description: "Gagal menghapus terapis",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus terapis ini?')) return;
+    removeTherapist(id);
   };
 
   const resetForm = () => {

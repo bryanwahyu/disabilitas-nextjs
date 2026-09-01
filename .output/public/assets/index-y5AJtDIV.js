@@ -1,0 +1,1 @@
+import{j as e}from"./index-aW8G_VO-.js";function t(){return e.jsxs("div",{className:"p-8",children:[e.jsx("h1",{className:"text-2xl font-bold text-white mb-2",children:"libur"}),e.jsx("p",{className:"text-slate-400 text-sm",children:"Halaman ini sedang dalam pengembangan."})]})}export{t as component};

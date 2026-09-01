@@ -130,36 +130,85 @@ export interface TherapistInsert {
 export interface TherapistUpdate extends Partial<TherapistInsert> {}
 
 // Appointment Types
+/**
+ * Janji temu — bentuknya mengikuti `internal/domain/appointments/entity.go`.
+ *
+ * Tipe lama (`therapist_id` wajib, `appointment_date`, `method: 'zoom'|'meet'|'call'`)
+ * tidak pernah cocok dengan API mana pun: backend memakai `provider_id`,
+ * `start_at`, dan `end_at`. Akibatnya `new Date(a.appointment_date)` selalu
+ * menghasilkan Invalid Date di halaman jadwal dan dashboard.
+ */
 export interface Appointment {
   id: string;
   user_id: string;
-  therapist_id: string;
-  appointment_date: string;
-  method: 'zoom' | 'meet' | 'call';
-  meeting_link?: string | null;
-  phone_number?: string | null;
-  notes?: string;
-  status?: string;
-  is_free?: boolean;
+  /** Terapis atau institusi yang dipesan. */
+  provider_id: string;
+  /** Terisi bila yayasan menugaskan terapis tertentu untuk sesi ini. */
+  therapist_id?: string | null;
+  location_id?: string | null;
+  /** Anak yang diterapi; kosong untuk pengguna dewasa yang berterapi sendiri. */
+  child_id?: string | null;
+  /** Terisi bila sesi ini bagian dari paket terapi berjalan. */
+  program_id?: string | null;
+  /** Nomor urut sesi di dalam paketnya ("sesi 3 dari 12"). */
+  session_seq?: number | null;
+  start_at: string;
+  end_at: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show' | string;
+  notes?: string | null;
+  cancelled_reason?: string | null;
   created_at: string;
   updated_at: string;
-  user?: User;
-  therapist?: Therapist;
+}
+
+/** Appointment di endpoint daftar — dilengkapi nama kedua pihak oleh backend. */
+export interface AppointmentWithParties extends Appointment {
+  user_name?: string;
+  provider_name?: string;
+}
+
+export interface ReviewSummary {
+  target_id: string;
+  average_rating: number;
+  total_reviews: number;
+}
+
+export interface Review {
+  id: string;
+  reviewer_id: string;
+  target_id: string;
+  target_type: string;
+  rating: number;
+  comment?: string | null;
+  created_at: string;
+  reviewer_name?: string | null;
+}
+
+/** Hari libur nasional; slot terapis pada tanggal ini otomatis tidak tersedia. */
+export interface Holiday {
+  id: string;
+  date: string;
+  name: string;
+  created_at: string;
 }
 
 export interface AppointmentInsert {
-  user_id: string;
-  therapist_id: string;
-  appointment_date: string;
-  method: 'zoom' | 'meet' | 'call';
-  meeting_link?: string | null;
-  phone_number?: string | null;
-  notes?: string;
-  status?: string;
-  is_free?: boolean;
+  provider_id: string;
+  therapist_id?: string | null;
+  location_id?: string | null;
+  /** ISO 8601 lengkap dengan offset, mis. `2026-08-25T09:00:00+07:00`. */
+  start_at: string;
+  end_at: string;
+  notes?: string | null;
 }
 
-export interface AppointmentUpdate extends Partial<AppointmentInsert> {}
+/** Field yang boleh diubah — mengikuti `appointmentUpdateReq` di backend. */
+export interface AppointmentUpdate {
+  start_at?: string;
+  end_at?: string;
+  notes?: string | null;
+  status?: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+}
 
 // Forum Types
 export interface ForumThread {
@@ -778,6 +827,87 @@ export type TablesUpdate<T> = T extends 'profiles'
   : never;
 
 // Trainings (Pelatihan)
+export interface Book {
+  id: string;
+  title: string;
+  author?: string;
+  description?: string;
+  category?: string;
+  cover_url?: string;
+  external_url: string;
+  disability_types?: string;
+  status: string;
+  view_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface Complaint {
+  id: string;
+  user_id: string;
+  category: string;
+  subject: string;
+  message: string;
+  attachments?: string;
+  status: string; // baru, diproses, selesai
+  admin_reply?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface GameQuestionPublic {
+  question: string;
+  options: string[];
+}
+
+export interface GamePublic {
+  id: string;
+  title: string;
+  description?: string;
+  type: string;
+  thumbnail_url?: string;
+  disability_types?: string;
+  requires_location: boolean;
+  status: string;
+  view_count: number;
+  question_count: number;
+  questions: GameQuestionPublic[];
+  created_at: string;
+}
+
+// Admin game includes the raw config (with answer keys) and location fields.
+export interface GameAdmin {
+  id: string;
+  title: string;
+  description?: string;
+  type: string;
+  thumbnail_url?: string;
+  config: string;
+  disability_types?: string;
+  requires_location: boolean;
+  allowed_lat?: number;
+  allowed_lng?: number;
+  radius_m?: number;
+  status: string;
+  view_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface GameSession {
+  id: string;
+  game_id: string;
+  user_id: string;
+  score: number;
+  max_score: number;
+  location_lat?: number;
+  location_lng?: number;
+  location_valid: boolean;
+  played_at: string;
+}
+
 export interface TrainingSummary {
   id: string;
   title: string;
@@ -963,6 +1093,145 @@ export interface ProgressMonthlySummary {
   milestone_count: number;
 }
 
+// --- Penilaian perkembangan anak (KPSP + klinis) ---
+
+export type KPSPDomain =
+  | 'motorik_kasar'
+  | 'motorik_halus'
+  | 'bicara_bahasa'
+  | 'sosialisasi_kemandirian';
+
+export interface KPSPQuestion {
+  no: number;
+  text: string;
+  domain: KPSPDomain;
+}
+
+export interface KPSPSet {
+  age_month: number;
+  label: string;
+  questions: KPSPQuestion[];
+}
+
+// Panduan tumbuh kembang publik (non-diagnostik) — deteksi dini Fase 4b.
+export interface MilestoneDomain {
+  domain: KPSPDomain;
+  label: string;
+  can: string[];
+  flags: string[];
+}
+
+export interface MilestoneSet {
+  age_month: number;
+  label: string;
+  domains: MilestoneDomain[];
+}
+
+export interface KPSPAnswer extends KPSPQuestion {
+  ya: boolean;
+}
+
+export type AssessmentInterpretation = 'sesuai' | 'meragukan' | 'penyimpangan';
+
+// --- Denver II (DDST-II) — skrining berbasis garis umur ---
+
+export type DenverSector = KPSPDomain; // sektor Denver dipetakan ke domain KPSP
+
+// Kategori hasil per item Denver (relatif garis umur anak).
+export type DenverItemResult = 'advanced' | 'normal' | 'caution' | 'delay';
+
+// Interpretasi keseluruhan tes Denver.
+export type DenverInterpretation = 'normal' | 'suspect' | 'untestable';
+
+export interface DenverItem {
+  no: number;
+  sector: DenverSector;
+  text: string;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+}
+
+export interface DenverSectorSet {
+  sector: DenverSector;
+  label: string;
+  items: DenverItem[];
+}
+
+export interface DenverForm {
+  age_month: number;
+  sectors: DenverSectorSet[];
+}
+
+// Jawaban satu item Denver (norma dibawa dari form → skoring server-authoritative).
+export interface DenverAnswer extends DenverItem {
+  passed: boolean;
+  refused?: boolean;
+}
+
+export interface DenverScoredItem {
+  no: number;
+  sector: DenverSector;
+  text: string;
+  passed: boolean;
+  refused: boolean;
+  result: DenverItemResult;
+}
+
+// Hasil scoring Denver (dipakai public-screen tanpa simpan & authed-submit).
+export interface DenverOutcome {
+  age_month: number;
+  items: DenverScoredItem[];
+  passed: number;
+  max: number;
+  cautions: number;
+  delays: number;
+  sector_concern: Record<string, number>;
+  interpretation: DenverInterpretation;
+}
+
+export interface DenverSubmitInput {
+  age_month?: number;
+  assessed_at?: string;
+  answers: DenverAnswer[];
+  notes?: string;
+}
+
+export interface Assessment {
+  id: string;
+  child_id: string;
+  type: 'kpsp' | 'denver' | 'clinical';
+  assessor_id: string;
+  assessor_role: string;
+  assessed_at: string;
+  age_month: number;
+  // KPSP
+  score?: number;
+  max_score?: number;
+  interpretation?: AssessmentInterpretation;
+  answers?: string; // JSON string of KPSPAnswer[]
+  // clinical
+  domain_scores?: string; // JSON string of Record<KPSPDomain, number>
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KPSPSubmitInput {
+  age_month?: number;
+  assessed_at?: string;
+  answers: KPSPAnswer[];
+  notes?: string;
+}
+
+export interface ClinicalAssessmentInput {
+  child_id: string;
+  assessed_at?: string;
+  domain_scores: Record<string, number>;
+  notes?: string;
+}
+
 // Komunitas dengan statistik aktivitas (endpoint publik, Fase 1 fokus komunitas)
 export interface CommunityWithStats extends Community {
   member_count: number;
@@ -1028,8 +1297,278 @@ export interface CommissionLedgerRow {
   created_at: string;
 }
 
+export interface Campaign {
+  id: string;
+  title: string;
+  slug: string;
+  description?: string;
+  cover_url?: string;
+  target_amount: number;
+  collected_amount: number;
+  status: 'draft' | 'active' | 'closed';
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Donation {
+  id: string;
+  campaign_id: string;
+  user_id?: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'failed' | 'expired';
+  payment_ref?: string;
+  payment_provider?: string;
+  anonymous: boolean;
+  paid_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CommissionReport {
   items: CommissionLedgerRow[];
   total_komisi: number;
   total_transaksi: number;
+  outstanding_komisi?: number;
+  outstanding_count?: number;
+  settled_komisi?: number;
+}
+
+// --- Konsultasi screening berbayar (mitra Kitty Center) ---
+
+export type ConsultationStatus =
+  | 'draft'
+  | 'pending_payment'
+  | 'paid'
+  | 'scheduled'
+  | 'completed'
+  | 'cancelled'
+  | 'expired';
+
+export interface Consultation {
+  id: string;
+  user_id: string;
+  child_id?: string;
+  assessment_id?: string;
+  status: ConsultationStatus;
+  amount: number;
+  currency: string;
+  payment_ref?: string;
+  payment_provider?: string;
+  paid_at?: string;
+  provider_partner_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConsultationIntake {
+  consultation_id: string;
+  complaints: string; // JSON array
+  main_concern: string;
+  assessment_summary?: string; // JSON snapshot hasil skrining
+  consent_pdp: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConsultationIntakeInput {
+  child_id?: string;
+  assessment_id?: string;
+  complaints: string[];
+  main_concern: string;
+  consent_pdp: boolean;
+}
+
+// Kontak mitra hanya dikirim server setelah pembayaran lunas.
+export interface PartnerContact {
+  name: string;
+  phone?: string;
+  email?: string;
+  city?: string;
+}
+
+export interface ConsultationDetail {
+  consultation: Consultation;
+  intake?: ConsultationIntake | null;
+  partner_contact?: PartnerContact | null;
+}
+
+export interface ConsultationCreateResult {
+  consultation_id: string;
+  amount: number;
+  payment_ref: string;
+  redirect_url: string;
+  provider: string;
+}
+
+export interface ConsultationQueueItem extends Consultation {
+  intake?: ConsultationIntake | null;
+}
+
+// Admin: akun mitra tujuan konsultasi. `source` = env | db | unset;
+// saat locked_by_env, setting DB diabaikan backend.
+export interface ConsultationPartner {
+  provider_id: string;
+  source?: 'env' | 'db' | 'unset';
+  locked_by_env?: boolean;
+  contact?: PartnerContact | null;
+}
+
+export interface PartnerCandidate {
+  id: string;
+  email: string;
+  name: string;
+}
+
+// --- Terapi berjalan (program paket sesi) ---
+
+export type TherapyProgramStatus =
+  | 'draft'
+  | 'pending_payment'
+  | 'active'
+  | 'completed'
+  | 'cancelled';
+
+export type TherapyGoalStatus = 'open' | 'achieved' | 'dropped';
+
+export type TherapyNextStep = 'continue' | 'graduate' | 'refer';
+
+/** Satu preferensi hari + jam mingguan untuk penjadwalan sesi. */
+export interface TherapySlotPref {
+  day_of_week: number; // 0=Minggu … 6=Sabtu
+  start_time: string; // "09:00" (jam dinding WIB)
+}
+
+export interface TherapyProgram {
+  id: string;
+  user_id: string;
+  child_id: string;
+  provider_id: string;
+  therapist_id?: string;
+  location_id?: string;
+  title: string;
+  total_sessions: number;
+  frequency_per_week: number;
+  slot_duration_minutes: number;
+  start_date: string; // YYYY-MM-DD
+  preferred_slots: string; // JSON array TherapySlotPref[]
+  status: TherapyProgramStatus;
+  amount: number;
+  currency: string;
+  payment_ref?: string;
+  payment_provider?: string;
+  paid_at?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TherapyGoal {
+  id: string;
+  program_id: string;
+  title: string;
+  baseline?: string;
+  target?: string;
+  status: TherapyGoalStatus;
+  achieved_at?: string;
+  achieved_note?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TherapyEvaluation {
+  id: string;
+  program_id: string;
+  therapist_id: string;
+  period: string; // "2026-09" atau "final"
+  sessions_count: number;
+  summary: string;
+  recommendation?: string;
+  next_step: TherapyNextStep;
+  created_at: string;
+}
+
+/** Satu sesi program; sumbernya appointment, bukan tabel terpisah. */
+export interface TherapyProgramSession {
+  appointment_id: string;
+  session_seq: number;
+  start_at: string;
+  end_at: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show' | string;
+  has_note: boolean;
+  progress_rating?: number;
+  activity?: string;
+  note_created_at?: string;
+}
+
+export interface TherapyProgramStats {
+  total_sessions: number;
+  attended: number;
+  absent: number;
+  cancelled: number;
+  upcoming: number;
+  scheduled: number;
+  remaining: number;
+  avg_rating: number;
+  goals_total: number;
+  goals_achieved: number;
+  next_session_at?: string;
+  completion_rate: number;
+}
+
+export interface TherapyProgramDetail extends TherapyProgram {
+  child_name: string;
+  provider_name?: string;
+  therapist_name?: string;
+  goals: TherapyGoal[];
+  evaluations: TherapyEvaluation[];
+  sessions: TherapyProgramSession[];
+  stats: TherapyProgramStats;
+}
+
+export interface TherapyProgramListItem extends TherapyProgram {
+  child_name: string;
+  provider_name?: string;
+  therapist_name?: string;
+  attended: number;
+  remaining: number;
+  next_session_at?: string;
+}
+
+export interface TherapyProgramInput {
+  child_id: string;
+  provider_id: string;
+  therapist_id?: string;
+  location_id?: string;
+  title?: string;
+  total_sessions: number;
+  frequency_per_week: number;
+  start_date?: string;
+  preferred_slots: TherapySlotPref[];
+  goals?: { title: string; baseline?: string; target?: string }[];
+}
+
+export interface TherapyProgramCreateResult {
+  program_id: string;
+  amount: number;
+  price_per_session: number;
+  total_sessions: number;
+  payment_ref: string;
+  redirect_url: string;
+  provider: string;
+}
+
+export interface TherapyProgramQuote {
+  price_per_session: number;
+  total_sessions: number;
+  amount: number;
+  currency: string;
+}
+
+export interface TherapyProgramPayResult {
+  status: TherapyProgramStatus;
+  sessions_created: number;
+  sessions_expected: number;
+  shortfall: boolean;
 }

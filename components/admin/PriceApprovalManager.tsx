@@ -1,7 +1,9 @@
-'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import type { PriceItem, PriceStatus } from '@/lib/api/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,45 +27,62 @@ const statusBadge = (s: PriceStatus) => {
 
 export default function PriceApprovalManager() {
   const { toast } = useToast();
-  const [items, setItems] = useState<PriceItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<PriceStatus | ''>('pending');
   const [jual, setJual] = useState<Record<string, string>>({});
   const [note, setNote] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await apiClient.adminPricing.listPrices(filter || undefined);
-    if (res.data) setItems(res.data);
-    setLoading(false);
-  }, [filter]);
+  const { data: items = [], isPending: loading } = useQuery({
+    queryKey: qk.admin.pricing.list({ status: filter || undefined }),
+    queryFn: () => unwrap(apiClient.adminPricing.listPrices(filter || undefined)),
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: qk.admin.pricing.lists() });
 
-  async function approve(p: PriceItem) {
+  const approveMutation = useMutation({
+    mutationFn: ({ p, hargaJual }: { p: PriceItem; hargaJual: number }) =>
+      unwrap(apiClient.adminPricing.approve(p.id, hargaJual)),
+    onSuccess: (_data, { p, hargaJual }) => {
+      toast({ title: 'Harga disetujui', description: `Komisi: ${rupiah(hargaJual - p.harga_dasar)}` });
+      invalidate();
+    },
+    onError: (e) => {
+      toast({ title: 'Gagal menyetujui', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ p, alasan }: { p: PriceItem; alasan: string }) =>
+      unwrap(apiClient.adminPricing.reject(p.id, alasan)),
+    onSuccess: () => {
+      toast({ title: 'Harga ditolak' });
+      invalidate();
+    },
+    onError: (e) => {
+      toast({ title: 'Gagal menolak', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    },
+  });
+
+  // Tombol hanya dikunci pada baris yang sedang diproses.
+  const busy =
+    (approveMutation.isPending ? approveMutation.variables?.p.id : undefined) ??
+    (rejectMutation.isPending ? rejectMutation.variables?.p.id : undefined) ??
+    null;
+
+  function approve(p: PriceItem) {
     const hj = parseInt(jual[p.id] ?? '', 10);
     if (!hj || hj < p.harga_dasar) {
       toast({ title: 'Harga jual tidak valid', description: 'Harga jual harus ≥ harga dasar.', variant: 'destructive' });
       return;
     }
-    setBusy(p.id);
-    const res = await apiClient.adminPricing.approve(p.id, hj);
-    setBusy(null);
-    if (res.error) { toast({ title: 'Gagal menyetujui', description: res.error, variant: 'destructive' }); return; }
-    toast({ title: 'Harga disetujui', description: `Komisi: ${rupiah(hj - p.harga_dasar)}` });
-    load();
+    approveMutation.mutate({ p, hargaJual: hj });
   }
 
-  async function reject(p: PriceItem) {
+  function reject(p: PriceItem) {
     const n = (note[p.id] ?? '').trim();
     if (!n) { toast({ title: 'Alasan wajib diisi', variant: 'destructive' }); return; }
-    setBusy(p.id);
-    const res = await apiClient.adminPricing.reject(p.id, n);
-    setBusy(null);
-    if (res.error) { toast({ title: 'Gagal menolak', description: res.error, variant: 'destructive' }); return; }
-    toast({ title: 'Harga ditolak' });
-    load();
+    rejectMutation.mutate({ p, alasan: n });
   }
 
   return (

@@ -56,5 +56,8 @@ export function portalDestinationForRole(role: string | undefined): string | nul
 
   const root = rootDomain(hostname);
   const portSuffix = port ? `:${port}` : '';
-  return `${protocol}//${SUBDOMAIN[portalRole]}.${root}${portSuffix}`;
+  // Prefix ikut ditulis: sejak lepas dari Next tidak ada lagi rewrite host→path,
+  // jadi akar subdomain portal menyajikan beranda publik, bukan portalnya.
+  // (`portalGuard` juga sudah mengalihkan, ini sekadar menghemat satu hop.)
+  return `${protocol}//${SUBDOMAIN[portalRole]}.${root}${portSuffix}${DEV_PATH[portalRole]}`;
 }

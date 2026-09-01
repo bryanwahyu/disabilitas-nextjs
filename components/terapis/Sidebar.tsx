@@ -1,32 +1,32 @@
-'use client';
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { Link } from '@tanstack/react-router';
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import {
-  LayoutDashboard, MessageSquare, Calendar, User,
+  LayoutDashboard, MessageSquare, Calendar, CalendarCheck, User,
   BookOpen, Star, Users, Link2, Settings, LogOut, Stethoscope, NotebookPen,
 } from 'lucide-react';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/konsultasi', label: 'Konsultasi', icon: MessageSquare },
-  { href: '/dashboard/jadwal', label: 'Jadwal', icon: Calendar },
-  { href: '/dashboard/jurnal', label: 'Jurnal Sesi', icon: NotebookPen },
-  { href: '/dashboard/profil', label: 'Profil Terapis', icon: User },
-  { href: '/dashboard/pelatihan', label: 'Pelatihan Saya', icon: BookOpen },
-  { href: '/dashboard/ulasan', label: 'Ulasan', icon: Star },
-  { href: '/dashboard/komunitas', label: 'Komunitas', icon: Users },
-  { href: '/dashboard/afiliasi', label: 'Afiliasi', icon: Link2 },
-  { href: '/dashboard/pengaturan', label: 'Pengaturan', icon: Settings },
+  { href: '/portal-terapis/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/portal-terapis/dashboard/konsultasi', label: 'Konsultasi', icon: MessageSquare },
+  { href: '/portal-terapis/dashboard/appointments', label: 'Janji Temu', icon: CalendarCheck },
+  { href: '/portal-terapis/dashboard/jadwal', label: 'Jadwal', icon: Calendar },
+  { href: '/portal-terapis/dashboard/jurnal', label: 'Jurnal Sesi', icon: NotebookPen },
+  { href: '/portal-terapis/dashboard/profil', label: 'Profil Terapis', icon: User },
+  { href: '/portal-terapis/dashboard/pelatihan', label: 'Pelatihan Saya', icon: BookOpen },
+  { href: '/portal-terapis/dashboard/ulasan', label: 'Ulasan', icon: Star },
+  { href: '/portal-terapis/dashboard/komunitas', label: 'Komunitas', icon: Users },
+  { href: '/portal-terapis/dashboard/afiliasi', label: 'Afiliasi', icon: Link2 },
+  { href: '/portal-terapis/dashboard/pengaturan', label: 'Pengaturan', icon: Settings },
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     localStorage.removeItem('terapis_token');
-    router.push('/auth');
+    navigate({ to: '/portal-terapis/auth' });
   };
 
   return (
@@ -44,13 +44,13 @@ export function Sidebar() {
       <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.href === '/dashboard'
-            ? pathname === '/dashboard'
+          const isActive = item.href === '/portal-terapis/dashboard'
+            ? pathname === '/portal-terapis/dashboard'
             : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
-              href={item.href}
+              to={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-teal-600/20 text-teal-300 border border-teal-500/20'

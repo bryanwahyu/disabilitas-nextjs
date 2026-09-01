@@ -1,6 +1,8 @@
-'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { unwrap } from '@/lib/query/unwrap';
+import { qk } from '@/lib/query/keys';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +17,7 @@ import { apiClient, Event, EventCreate, EventUpdate } from '@/lib/api/client';
 import { toast } from 'sonner';
 
 export default function EventManager() {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [formData, setFormData] = useState<EventCreate>({
@@ -28,53 +29,50 @@ export default function EventManager() {
     location: '',
   });
 
+  const listParams = { limit: 100 };
+  const { data: events = [], isPending: loading, error: listError, refetch: fetchEvents } = useQuery({
+    queryKey: qk.admin.events.list(listParams),
+    queryFn: () => unwrap(apiClient.adminEvents.list(listParams)),
+  });
+
   useEffect(() => {
-    fetchEvents();
-  }, []);
+    if (!listError) return;
+    console.error('Error fetching events:', listError);
+    toast.error('Gagal memuat data acara');
+  }, [listError]);
 
-  const fetchEvents = async () => {
-    setLoading(true);
-    try {
-      const response = await apiClient.adminEvents.list({ limit: 100 });
-      if (response.data) {
-        setEvents(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      toast.error('Gagal memuat data acara');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const invalidateEvents = () =>
+    queryClient.invalidateQueries({ queryKey: qk.admin.events.lists() });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      if (editingEvent) {
+  const { mutate: saveEvent } = useMutation({
+    mutationFn: ({ id, body }: { id: string | null; body: EventCreate }) => {
+      if (id) {
         const updateData: EventUpdate = {
-          title: formData.title,
-          mode: formData.mode,
-          start_at: formData.start_at,
-          end_at: formData.end_at,
-          capacity: formData.capacity,
-          location: formData.location,
+          title: body.title,
+          mode: body.mode,
+          start_at: body.start_at,
+          end_at: body.end_at,
+          capacity: body.capacity,
+          location: body.location,
         };
-        const response = await apiClient.adminEvents.update(editingEvent.id, updateData);
-        if (response.error) throw new Error(response.error);
-        toast.success('Acara berhasil diperbarui');
-      } else {
-        const response = await apiClient.adminEvents.create(formData);
-        if (response.error) throw new Error(response.error);
-        toast.success('Acara berhasil dibuat');
+        return unwrap(apiClient.adminEvents.update(id, updateData));
       }
-
+      return unwrap(apiClient.adminEvents.create(body));
+    },
+    onSuccess: (_data, { id }) => {
+      toast.success(id ? 'Acara berhasil diperbarui' : 'Acara berhasil dibuat');
       setIsDialogOpen(false);
       resetForm();
-      fetchEvents();
-    } catch (error: any) {
+      invalidateEvents();
+    },
+    onError: (error: any) => {
       toast.error(error.message || 'Gagal menyimpan acara');
-    }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveEvent({ id: editingEvent?.id ?? null, body: formData });
   };
 
   const handleEdit = (event: Event) => {
@@ -90,17 +88,20 @@ export default function EventManager() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus acara ini?')) return;
-
-    try {
-      const response = await apiClient.adminEvents.delete(id);
-      if (response.error) throw new Error(response.error);
+  const { mutate: removeEvent } = useMutation({
+    mutationFn: (id: string) => unwrap(apiClient.adminEvents.delete(id)),
+    onSuccess: () => {
       toast.success('Acara berhasil dihapus');
-      fetchEvents();
-    } catch (error: any) {
+      invalidateEvents();
+    },
+    onError: (error: any) => {
       toast.error(error.message || 'Gagal menghapus acara');
-    }
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus acara ini?')) return;
+    removeEvent(id);
   };
 
   const resetForm = () => {
@@ -169,7 +170,7 @@ export default function EventManager() {
             <CardDescription>Kelola acara dan kegiatan platform</CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={fetchEvents}>
+            <Button variant="outline" size="sm" onClick={() => fetchEvents()}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
             </Button>
